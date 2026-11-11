@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1226" media="(prefers-color-scheme: dark)">
-  <meta name="description" content="Boulder Log">
-  <title>Boulder Log</title>
+  <meta name="description" content="Chalkmark: marque cada via, cada sessão, cada grau.">
+  <title>Chalkmark</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/icon-180.png">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -15,8 +15,18 @@
   <script type="module" src="/assets/__JS__"></script>
 </head>
 <body>
+  <!-- Filtro de giz: borda irregular + falhas de pó. Usado pelos riscos de giz (url(#chalk)). -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <filter id="chalk" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="5" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="2.4" numOctaves="1" seed="9" result="grain"/>
+      <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.35" result="holes"/>
+      <feComposite in="rough" in2="holes" operator="in"/>
+    </filter>
+  </svg>
   <header class="top">
-    <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 25 13 9l5 9 3-5 5 12Z"/></svg>Boulder Log</a>
+    <a class="brand" href="#/"><svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"><path class="brand-hold" d="M30 12c14-8 38-6 50 8s10 38-2 52-34 22-50 14S6 60 8 42s8-22 22-30Z"/><path class="chalk-stroke" filter="url(#chalk)" d="M24 52c6 5 12 12 17 20 9-17 22-34 40-48"/></svg>Chalkmark</a>
     <div class="row">
     <span class="streak-pill num" id="streak-pill" hidden></span>
     <button class="icon-btn" id="open-settings" type="button" hidden aria-label="Ajustes">

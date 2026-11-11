@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CfnOutput, Duration, Fn, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
@@ -138,6 +139,13 @@ export class BoulderStack extends Stack {
     new cognito.CfnManagedLoginBranding(this, 'LoginBranding', {
       userPoolId: userPool.userPoolId,
       clientId: client.userPoolClientId,
+      // Logo do Chalkmark (risco de giz sobre a agarra) acima do formulário, nos dois temas.
+      assets: (['LIGHT', 'DARK'] as const).map((colorMode) => ({
+        category: 'FORM_LOGO',
+        colorMode,
+        extension: 'SVG',
+        bytes: readFileSync(path.join(ROOT, 'web', 'icon.svg')).toString('base64'),
+      })),
       settings: {
         categories: {
           global: { colorSchemeMode: 'DYNAMIC' },

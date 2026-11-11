@@ -1,4 +1,4 @@
-// Boulder Log: SPA sem framework. Rotas por hash, dados em memória, API em /api.
+// Chalkmark: SPA sem framework. Rotas por hash, dados em memória, API em /api.
 import './style.css';
 import { fmtDate, fmtDuration, fmtPct, lang, t } from './i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
@@ -224,6 +224,19 @@ function hold(i, fill, { fillPct = 1, track = 'var(--surface-2)' } = {}) {
       svg('stop', { offset: at, 'stop-color': fill }), svg('stop', { offset: at, 'stop-color': track }))),
     svg('path', { d, fill: `url(#${id})` }), svg('circle', { class: 'bolt', cx: 50, cy: 50, r: 5 }));
 }
+/** Risco de giz desenhado à mão (filtro #chalk no index.html). */
+const TICK = 'M24 52c6 5 12 12 17 20 9-17 22-34 40-48';
+const chalkTick = (cls = '') => svg('svg', { class: `tick ${cls}`, viewBox: '0 0 100 100', 'aria-hidden': 'true' },
+  svg('path', { class: 'chalk-stroke', filter: 'url(#chalk)', d: TICK }));
+
+/** Pó de giz subindo (comemorações). */
+const chalkPuff = () => h('div', { class: 'puff', 'aria-hidden': 'true' },
+  [...Array(14)].map((_, i) => {
+    const a = (i / 14) * Math.PI * 2;
+    const r = 60 + (i % 3) * 22;
+    return h('i', { style: { '--dx': `${Math.round(Math.cos(a) * r)}px`, '--dy': `${Math.round(Math.sin(a) * r * 0.7 - 20)}px`, '--s': `${6 + (i % 4) * 3}px`, '--d': `${(i % 5) * 40}ms` } });
+  }));
+
 const KIND_COLOR = { sessions: '#2f5bff', sends: '#1fbf6a', flash: '#ffc531', grade: '#ff3d7f', projects: '#9b5cff', streak: '#ff7a1a', big: '#00b8d9', gyms: '#00b8d9' };
 
 const icon = (kind) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, svg('path', { d: ICONS[kind] }));
@@ -284,7 +297,7 @@ function hero() {
       h('div', { class: 'grow' }, h('b', { class: 'num' }, String(n)), h('span', {}, n === 1 ? t('streak.week') : t('streak.weeks'))),
       h('div', { class: 'lv' }, h('span', { class: 'lv-badge num' }, String(lv.level)), h('span', { class: 'small' }, t('xp.level', { n: lv.level })))),
     h('ol', { class: 'week' }, dots.map((on, i) => h('li', { class: [on ? 'on' : 'off', i === today && 'today'].filter(Boolean).join(' ') },
-      hold(i, on ? HOLD_COLORS[i] : 'none'), h('span', {}, wd[i])))),
+      hold(i, on ? HOLD_COLORS[i] : 'none'), on && chalkTick(), h('span', {}, wd[i])))),
     h('div', { class: 'xp' },
       h('div', { class: 'progress' }, h('span', { style: { '--w': `${(lv.into / lv.need) * 100}%` } })),
       h('span', { class: 'small num' }, t('xp.toNext', { a: lv.into, b: lv.need }))),
@@ -317,7 +330,7 @@ function gradePathCard() {
       return h('li', { class: [state_, isNext && 'next'].filter(Boolean).join(' '), style: { '--off': offsets[i % offsets.length] } },
         h('span', { class: 'node', 'aria-label': `${grade(p.grade)}: ${p.sends}/${S.MASTERY}` },
           hold(p.grade, color, { fillPct: p.mastered ? 1 : p.unlocked ? Math.max(0.12, pct) : 1, track: 'var(--line)' }),
-          h('b', { class: 'num' }, grade(p.grade))),
+          h('b', { class: 'num' }, grade(p.grade)), p.mastered && chalkTick('small')),
         h('span', { class: 'node-meta small' }, p.mastered ? [icon('check'), t('path.mastered')] : p.unlocked ? `${p.sends}/${S.MASTERY}` : icon('lock')));
     }).reverse()));
 }
@@ -329,6 +342,7 @@ function celebrate({ unlocked, xp, levelUp }) {
   const best = Math.max(...state.climbs.filter(S.isSend).map((c) => c.grade));
   const isPr = pr != null && pr >= best;
   openSheet(h('div', { class: 'stack celebrate' },
+    h('div', { class: 'burst' }, chalkPuff(), chalkTick('draw')),
     isPr
       ? [h('p', { class: 'kicker' }, t('ach.pr')), h('div', { class: 'big-grade num' }, grade(pr)), h('p', { class: 'muted center' }, t('ach.prLead', { g: grade(pr) }))]
       : levelUp
@@ -345,6 +359,7 @@ function recapSheet(s, unlocked) {
   const flashes = cs.filter((c) => c.result === 'flash').length;
   const big = (v, label) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, label));
   openSheet(h('div', { class: 'stack celebrate' },
+    h('div', { class: 'burst' }, chalkPuff(), chalkTick('draw')),
     h('p', { class: 'kicker' }, t('recap.title')),
     h('p', { class: 'muted center num' }, `${gymOf(s.gymId)?.name ?? ''}, ${fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}`),
     h('p', { class: 'xp-gain num center' }, t('xp.gain', { n: S.totalXp(cs) })),
@@ -1097,7 +1112,7 @@ function showAuth() {
   $('#tabbar').hidden = true;
   $('#open-settings').hidden = true;
   view.replaceChildren(h('div', { class: 'auth' },
-    h('div', { class: 'holds-art' }, [0, 1, 2, 3].map((i) => hold(i, HOLD_COLORS[i]))),
+    h('div', { class: 'auth-mark' }, hold(0, '#2f5bff'), chalkTick('draw')),
     h('h1', {}, t('auth.title')),
     h('p', {}, t('auth.lead')),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => login() }, t('auth.login')),

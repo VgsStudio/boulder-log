@@ -1,6 +1,6 @@
-# Boulder Log
+# Chalkmark
 
-Diário de boulder gamificado: sessões, vias com foto e cor detectada pelo toque,
+Diário de boulder gamificado (antes "Boulder Log"): sessões, vias com foto e cor detectada pelo toque,
 projetos, trilha de graus, XP, sequência semanal, conquistas e evolução.
 Tudo serverless na AWS, em `boulder.vsoller.com.br`.
 
