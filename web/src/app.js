@@ -170,12 +170,21 @@ async function compress(canvas, q) {
   const webp = await encode(canvas, 'image/webp', q);
   return webp?.type === 'image/webp' ? webp : encode(canvas, 'image/jpeg', q);
 }
+/** Envia a foto direto ao S3; tenta 3 vezes (sinal ruim no ginásio é comum). */
 async function upload({ url, fields }, blob) {
-  const fd = new FormData();
-  Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
-  fd.append('file', blob);
-  const res = await fetch(url, { method: 'POST', body: fd });
-  if (!res.ok) throw new Error('UPLOAD');
+  for (let attempt = 1; ; attempt++) {
+    const fd = new FormData();
+    Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+    fd.append('file', blob);
+    try {
+      const res = await fetch(url, { method: 'POST', body: fd });
+      if (res.ok) return;
+      if (res.status < 500 || attempt === 3) throw new Error('UPLOAD');
+    } catch (err) {
+      if (attempt === 3) throw err;
+    }
+    await new Promise((r) => setTimeout(r, 1500 * attempt));
+  }
 }
 
 // ---------- componentes ----------
@@ -562,8 +571,12 @@ function viewNew() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !(await ensurePhotoTerms())) return;
+    d.preparing = true;
+    draw();
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))); // deixa o aviso aparecer antes do trabalho pesado
     try {
       const canvas = await toCanvas(file, 1568);
+      d.preparing = false;
       Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading' });
       d.rgba = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data;
       draw();
@@ -577,7 +590,7 @@ function viewNew() {
         console.error(err);
         if (d.canvas === canvas) { d.detect = 'failed'; draw(); }
       });
-    } catch (err) { fail(err); }
+    } catch (err) { d.preparing = false; draw(); fail(err); }
   };
   const fileInput = () => h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: pickPhoto });
 
@@ -606,9 +619,17 @@ function viewNew() {
   };
   const onTap = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    applyTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    const hit = d.route && d.boxes && holdAt(d.boxes, x, y);
+    if (hit && hit !== d.seed) {
+      // Ajuste manual: toque numa agarra inclui ou tira ela da via.
+      d.route = d.route.includes(hit) ? d.route.filter((b) => b !== hit) : [...d.route, hit];
+    } else if (!hit || !d.route) {
+      applyTap(x, y);
+    }
     draw();
   };
+  const resetRoute = () => { Object.assign(d, { tap: null, seed: null, route: null, suggestion: null, lab: null }); draw(); };
 
   const doCalibrate = async () => {
     if (!gym || !d.lab || !d.color || d.color === 'other') return;
@@ -690,12 +711,12 @@ function viewNew() {
         : d.canvas
           ? h('section', {},
             h('div', { class: 'stage', onclick: onTap }, d.canvas,
-              holdsOverlay(d.route),
+              holdsOverlay(d.route, d.boxes),
               d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
-                  : d.route ? t('detect.route', { n: d.route.length })
+                  : d.route ? [t('detect.route', { n: d.route.length }), ' ', h('button', { class: 'link small', type: 'button', onclick: resetRoute }, t('detect.reset'))]
                     : d.boxes ? t('detect.found', { n: d.boxes.length }) : ''),
             d.suggestion
               ? h('div', { class: 'suggestion small' },
@@ -704,8 +725,10 @@ function viewNew() {
                 d.color && d.color !== 'other' && h('button', { class: 'link small', type: 'button', onclick: doCalibrate }, t('climb.calibrate', { c: colorName(d.color).toLowerCase() })))
               : h('p', { class: 'muted small' }, t('climb.tapHint')),
             h('label', { class: 'link small' }, t('climb.retake'), fileInput()))
-          : h('label', { class: 'photo-pick' },
-            h('div', {}, svgCamera(), t('climb.photo')), fileInput()),
+          : d.preparing
+            ? h('div', { class: 'photo-pick' }, h('p', { class: 'small detect-status loading' }, t('detect.preparing')))
+            : h('label', { class: 'photo-pick' },
+              h('div', {}, svgCamera(), t('climb.photo')), fileInput()),
 
       // Cor: o toque escolhe sozinho; a lista só aparece sem toque ou se pedir para trocar.
       h('section', {}, h('h2', {}, t('climb.color')),
@@ -738,10 +761,12 @@ function viewNew() {
 }
 
 /** Caixas das agarras da via sobre a foto (coordenadas 0-1). */
-function holdsOverlay(holds) {
-  if (!holds?.length) return null;
+function holdsOverlay(holds, all = []) {
+  if (!holds?.length && !all?.length) return null;
+  const others = (all ?? []).filter((b) => !holds?.includes(b));
   return svg('svg', { class: 'overlay', viewBox: '0 0 1 1', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
-    holds.flatMap((b) => [
+    others.map((b) => svg('rect', { class: 'cand', x: b.x, y: b.y, width: b.w, height: b.h })),
+    (holds ?? []).flatMap((b) => [
       svg('rect', { class: 'under', x: b.x, y: b.y, width: b.w, height: b.h }),
       svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h }),
     ]));

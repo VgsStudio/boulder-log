@@ -2,10 +2,10 @@
 // Modelo: jwlarocque/yolov8n-freeclimbs-detect-2 (Hugging Face, AGPL-3.0). Carrega só
 // quando o usuário tira a primeira foto; depois fica no cache do navegador.
 // A cor de cada agarra vem do color.js (mesmo método do toque).
-import { boxLab, suggest } from './color.js';
+import { boxLab, colorDistance, suggest } from './color.js';
 
 const SIZE = 2560; // entrada fixa do modelo exportado
-const CONF = 0.25;
+const CONF = 0.3; // abaixo disso aparecem pedaços de parede lisa como "agarra"
 const IOU = 0.5;
 const MODEL_URL = '/assets/models/holds-yolov8n-fp16.onnx';
 /* global __ORT_BASE__ */
@@ -71,7 +71,10 @@ export function decode(read, n, scale, width, height, conf = CONF) {
 
 /** Cor de cada caixa, descontando a cor da parede em volta (color.boxLab). */
 export function colorize(boxes, rgba, W, H, palette) {
-  for (const b of boxes) b.color = suggest(boxLab(rgba, W, H, b), palette).best;
+  for (const b of boxes) {
+    b.lab = boxLab(rgba, W, H, b);
+    b.color = suggest(b.lab, palette).best;
+  }
   return boxes;
 }
 
@@ -108,7 +111,7 @@ export async function detectHolds(canvas, palette = {}) {
  *  estiver a até `maxGap` (fração do lado maior da foto) de alguma já incluída, então
  *  vias da mesma cor em outro canto da parede ficam de fora.
  *  ponytail: distância fixa; se errar muito, usar a mediana da distância entre agarras vizinhas. */
-export function routeHolds(boxes, seed, width, height, maxGap = 0.1) {
+export function routeHolds(boxes, seed, width, height, maxGap = 0.18, tolerance = 16) {
   const side = Math.max(width, height);
   const cx = (b) => (b.x + b.w / 2) * width, cy = (b) => (b.y + b.h / 2) * height;
   // Distância entre bordas (não centros): volumes grandes não ficam isolados.
@@ -117,7 +120,18 @@ export function routeHolds(boxes, seed, width, height, maxGap = 0.1) {
     const dy = Math.max(0, Math.abs(cy(a) - cy(b)) - (a.h + b.h) * height / 2);
     return Math.hypot(dx, dy) / side;
   };
-  const left = new Set(boxes.filter((b) => b !== seed && b.color === seed.color));
+  // Mesma via = cor medida parecida com a da agarra tocada (não o nome da cor: uma roxa com
+  // magnésio pode virar "branca" na paleta, mas a cor medida continua perto das outras roxas).
+  // Agarra neutra (branca, cinza, preta) não tem matiz para comparar: aí o claro/escuro decide,
+  // senão branca e cinza viram a mesma via.
+  const neutral = seed.lab && Math.hypot(seed.lab[1], seed.lab[2]) < 12;
+  const near = (a, c) => (neutral
+    ? Math.hypot((a[0] - c[0]) / 1.2, a[1] - c[1], a[2] - c[2]) <= 13
+    : colorDistance(a, c) <= tolerance);
+  const similar = (b) => (b.lab && seed.lab ? near(b.lab, seed.lab) : b.color === seed.color);
+  // Caixas minúsculas (adesivos, etiquetas de grau, parafusos) não entram sozinhas na via.
+  const tiny = (b) => b.w * b.h < 0.00025;
+  const left = new Set(boxes.filter((b) => b !== seed && !tiny(b) && similar(b)));
   const route = [seed];
   for (let i = 0; i < route.length; i++) {
     for (const b of left) if (gap(route[i], b) <= maxGap) { left.delete(b); route.push(b); }

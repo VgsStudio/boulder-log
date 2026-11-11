@@ -415,3 +415,5 @@ body {
   0% { opacity: .55; transform: translate(0, 0) scale(.6); }
   100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.6); }
 }
+.overlay rect.cand { stroke: rgb(255 255 255 / .45); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.photo-pick .detect-status { margin: 0; }

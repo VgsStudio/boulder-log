@@ -93,7 +93,7 @@ export function boxLab(rgba, W, H, b) {
 
 // Distância em LCh: a luz do ginásio muda muito a luminosidade (L) e a saturação (C),
 // pouco o matiz (h). Por isso L pesa 1/3, C pesa 1/2 e o matiz pesa inteiro.
-const dist = ([L1, a1, b1], [L2, a2, b2]) => {
+export const colorDistance = ([L1, a1, b1], [L2, a2, b2]) => {
   const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2);
   const dH = 2 * Math.sqrt(C1 * C2) * Math.sin((Math.atan2(b1, a1) - Math.atan2(b2, a2)) / 2);
   return Math.hypot((L1 - L2) / 3, (C1 - C2) / 2, dH);
@@ -102,7 +102,7 @@ const dist = ([L1, a1, b1], [L2, a2, b2]) => {
 /** Cores ordenadas pela distância. Distância acima de `limit` → sugere "other". */
 export function suggest(lab, palette = DEFAULT_PALETTE, limit = 22) {
   const ranked = Object.entries({ ...DEFAULT_PALETTE, ...palette })
-    .map(([color, ref]) => ({ color, d: dist(lab, ref) }))
+    .map(([color, ref]) => ({ color, d: colorDistance(lab, ref) }))
     .sort((a, b) => a.d - b.d);
   const best = ranked[0].d > limit ? 'other' : ranked[0].color;
   return { best, second: best === 'other' ? ranked[0].color : ranked[1].color, distance: ranked[0].d };
