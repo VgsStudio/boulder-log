@@ -11,7 +11,7 @@ const env = (name: string, fallback: string) => process.env[name] ?? fallback;
 export const TABLE = env('TABLE_NAME', 'test-table');
 export const PHOTO_BUCKET = env('PHOTO_BUCKET', 'test-photos');
 export const ALLOWED_ORIGIN = env('ALLOWED_ORIGIN', 'https://localhost');
-export const AI_MODEL = env('AI_MODEL', 'anthropic.claude-haiku-5-5');
+export const AI_MODEL = env('AI_MODEL', 'us.anthropic.claude-haiku-4-5-20251001-v1:0');
 export const AI_DAILY_LIMIT = Number(env('AI_DAILY_LIMIT', '20'));
 
 /** ID ordenável pelo tempo (base36 do ms + aleatório): a ordem do sk já é cronológica. */

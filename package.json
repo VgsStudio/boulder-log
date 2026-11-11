@@ -14,7 +14,7 @@
     "deploy": "cdk deploy --all"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^1.1.2",
+    "@aws-sdk/client-bedrock-runtime": "^3.1167.0",
     "@aws-sdk/client-dynamodb": "^3.1167.0",
     "@aws-sdk/client-s3": "^3.1167.0",
     "@aws-sdk/lib-dynamodb": "^3.1167.0",

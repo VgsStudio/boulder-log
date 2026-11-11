@@ -32,6 +32,6 @@ depois o secret `AWS_DEPLOY_ROLE_ARN` e a variable `HOSTED_ZONE_ID` no repositó
 
 ## IA
 
-Usa `AI_MODEL` (padrão `anthropic.claude-haiku-5-5`) pelo endpoint bedrock-mantle. A conta precisa
-de acesso ao modelo no console do Bedrock. Sem acesso, o app segue funcionando e o botão de IA
+Usa a API Converse do Bedrock com `AI_MODEL` (padrão Claude Haiku 4.5, `us.anthropic.claude-haiku-4-5-20251001-v1:0`;
+trocar por `us.amazon.nova-lite-v1:0` também funciona). Sem acesso, o app segue funcionando e o botão de IA
 avisa que está indisponível. Cota: `AI_DAILY_LIMIT` análises por usuário por dia.

@@ -255,11 +255,11 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const bytes = Buffer.from(await obj.Body!.transformToByteArray());
       let ai;
       try {
-        ai = await analyzePhoto(bytes, c.photoType as 'image/webp' | 'image/jpeg', c.tap as { x: number; y: number } | undefined);
+        ai = await analyzePhoto(bytes, c.photoType as 'image/webp' | 'image/jpeg', { color: c.color as string, tap: c.tap as { x: number; y: number } | undefined });
       } catch (e) {
         // Falha não conta na cota do dia.
         await ddb.send(new UpdateCommand({ TableName: TABLE, Key: { pk, sk: `AIQUOTA#${nowIso().slice(0, 10)}` }, UpdateExpression: 'ADD n :m', ExpressionAttributeValues: { ':m': -1 } }));
-        const status = (e as { status?: number }).status;
+        const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? (e as { status?: number }).status;
         log('ai.failed', { status, error: (e as Error).message.slice(0, 300) });
         throw new HttpError(503, status === 403 || status === 404 ? 'AI_UNAVAILABLE' : 'AI_FAILED');
       }

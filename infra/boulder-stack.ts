@@ -89,9 +89,14 @@ export class BoulderStack extends Stack {
     table.grantReadWriteData(apiFn);
     photos.grantReadWrite(apiFn, 'photos/*');
     photos.grantDelete(apiFn, 'photos/*');
-    // ponytail: recurso '*' porque o formato do ARN de modelo no bedrock-mantle não é estável;
-    // a Lambda só chama o modelo de AI_MODEL e a cota diária limita o uso.
-    apiFn.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock-mantle:CreateInference'], resources: ['*'] }));
+    // Converse no modelo de AI_MODEL: o perfil de inferência (us.*) e os modelos de base para onde ele roteia.
+    apiFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel'],
+      resources: [
+        `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
+        'arn:aws:bedrock:*::foundation-model/*',
+      ],
+    }));
 
     // ---------- Login (Cognito Managed Login com a cara do app) ----------
     const userPool = new cognito.UserPool(this, 'Users', {
