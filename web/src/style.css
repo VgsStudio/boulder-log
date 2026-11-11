@@ -374,3 +374,4 @@ p.small .ico { display: inline; width: 14px; height: 14px; vertical-align: -2px;
 .color-auto { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 2px solid var(--line); border-radius: 16px; background: var(--surface); }
 .color-auto .swatch { width: 26px; height: 26px; }
 .color-auto strong { font-family: var(--display); font-size: 1.1rem; }
+.project-actions { margin: 14px 0 6px; }

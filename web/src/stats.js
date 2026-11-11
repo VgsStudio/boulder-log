@@ -75,7 +75,9 @@ export function sessionSummaries(sessions, climbs) {
 
 /** Projetos: um registro "project" é a raiz; os seguintes apontam para ela via projectId. */
 export function projects(climbs) {
-  const roots = climbs.filter((c) => !c.projectId && c.result === 'project');
+  // Raiz: marcada como projeto, ou já com tentativas ligadas a ela (mesmo que depois
+  // tenha sido editada para "mandou" — continua sendo um projeto, agora concluído).
+  const roots = climbs.filter((c) => !c.projectId && (c.result === 'project' || climbs.some((x) => x.projectId === c.id)));
   return roots.map((root) => {
     const tries = [root, ...climbs.filter((c) => c.projectId === root.id)].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const sent = tries.find(isSend);

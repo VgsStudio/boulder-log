@@ -96,3 +96,15 @@ test('ginásio mais próximo e conquista de ginásios', async () => {
   const g2 = achievements(sessions, []).find((x: { id: string }) => x.id === 'gyms:2');
   assert.equal(g2?.at, '2026-11-09T15:00:00');
 });
+
+test('projeto editado para "mandou" continua projeto (concluído)', async () => {
+  const { projects } = await import('../web/src/stats.js');
+  const cs = [
+    c('r', '2026-11-02', 6, 'sent'), // raiz editada depois para "mandou"
+    c('t', '2026-11-04', 6, 'project', { projectId: 'r' }),
+  ];
+  const [p] = projects(cs);
+  assert.equal(p.root.id, 'r');
+  assert.equal(p.attempts, 4);
+  assert.ok(p.sentAt);
+});

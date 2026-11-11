@@ -33,6 +33,8 @@ function h(tag, attrs, ...kids) {
   el.append(...kids.flat(Infinity).filter((k) => k != null && k !== false));
   return el;
 }
+/** Troca o conteúdo ignorando null/undefined/false (replaceChildren os viraria texto). */
+const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
 const NS = 'http://www.w3.org/2000/svg';
 function svg(tag, attrs, ...kids) {
   const el = document.createElementNS(NS, tag);
@@ -538,7 +540,7 @@ function viewNew() {
   const openProjects = S.projects(state.climbs).filter((p) => !p.sentAt);
 
   const root = h('div', { class: 'stack' });
-  const draw = () => root.replaceChildren(...parts());
+  const draw = () => fill(root, parts());
 
   const pickPhoto = async (e) => {
     const file = e.target.files?.[0];
@@ -630,6 +632,13 @@ function viewNew() {
         climb.thumbUrl = URL.createObjectURL(thumb);
       }
       state.climbs.push(climb);
+      // Estilo da via (tipo de agarra, parede, estilo) em segundo plano; falha não atrapalha o registro.
+      if (uploads) {
+        api(`/climbs/${climb.id}/analyze`, { method: 'POST' }).then((x) => {
+          upsert(state.climbs, x);
+          if (location.hash === `#/climb/${climb.id}`) render();
+        }, (err) => console.warn('analyze', err));
+      }
       const unlocked = S.newAchievements(before, S.achievements(state.sessions, state.climbs));
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
       setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0 }), 50);
@@ -747,6 +756,24 @@ function viewClimb(id) {
     } catch (err) { fail(err); }
     draw();
   };
+  /** Nova tentativa de um projeto (mandou ou ainda não), ligada à raiz, na sessão ativa. */
+  const logTry = async (rootClimb, result, btn) => {
+    const s = activeSession();
+    if (!s) { toast(t('project.needSession')); return; }
+    btn.disabled = true;
+    try {
+      const before = S.achievements(state.sessions, state.climbs);
+      const lvBefore = S.level(S.totalXp(state.climbs)).level;
+      const { climb } = await api('/climbs', {
+        method: 'POST',
+        body: { sessionId: s.id, color: rootClimb.color, grade: rootClimb.grade, attempts: 1, result, projectId: rootClimb.id },
+      });
+      state.climbs.push(climb);
+      const lvAfter = S.level(S.totalXp(state.climbs)).level;
+      celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0 });
+      draw();
+    } catch (err) { fail(err); btn.disabled = false; }
+  };
   const del = async (e) => {
     if (!confirmDelete) { confirmDelete = true; e.currentTarget.textContent = t('climb.confirmDelete'); return; }
     try {
@@ -766,7 +793,7 @@ function viewClimb(id) {
       .then((x) => { upsert(state.climbs, x); draw(); }, fail);
     const toggle = (list, v, max) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v].slice(-max));
 
-    box.replaceChildren(
+    fill(box, 
       h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
       h('h1', { class: 'row' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
 
@@ -789,6 +816,10 @@ function viewClimb(id) {
         h('p', { class: 'num' }, proj.sentAt
           ? t('climb.projectSent', { d: fmtDate(proj.sentAt, { day: 'numeric', month: 'long' }) })
           : t('climb.projectProgress', { a: proj.attempts, s: proj.sessions })),
+        // Projeto aberto: registrar a nova tentativa direto daqui, na sessão de hoje.
+        !proj.sentAt && h('div', { class: 'row project-actions' },
+          h('button', { class: 'btn go big grow', type: 'button', onclick: (e) => logTry(r, 'sent', e.currentTarget) }, t('project.sent')),
+          h('button', { class: 'btn big grow', type: 'button', onclick: (e) => logTry(r, 'project', e.currentTarget) }, t('project.again'))),
         h('ul', { class: 'list' }, tries.map(climbRow))),
 
       r.photoType && h('section', { class: 'card stack' },
@@ -847,7 +878,7 @@ function viewHistory() {
       .filter((c) => c.thumbUrl && (!historyUi.color || c.color === historyUi.color) && (!historyUi.result || c.result === historyUi.result))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-    box.replaceChildren(
+    fill(box, 
       h('h1', {}, t('tab.history')),
       h('section', { class: 'card' },
         h('div', { class: 'cal-head' },
@@ -1008,7 +1039,7 @@ function lineChart(weeks) {
 function settingsSheet() {
   const st = { ...state.settings };
   const box = h('div', { class: 'stack' });
-  const draw = () => box.replaceChildren(
+  const draw = () => fill(box, 
     h('h2', {}, t('settings.title')),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.scale')),
       seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; draw(); })),
