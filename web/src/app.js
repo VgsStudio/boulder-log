@@ -56,7 +56,7 @@ const swatch = (c) => h('span', { class: `swatch ${c === 'other' ? 'other' : ''}
 /** Botões de escolha única (segmented). */
 function seg(options, value, onPick) {
   return h('div', { class: 'seg', role: 'group' }, options.map(([v, label]) =>
-    h('button', { type: 'button', 'aria-pressed': String(v === value), onclick: () => onPick(v) }, label)));
+    h('button', { type: 'button', 'data-v': String(v), 'aria-pressed': String(v === value), onclick: () => onPick(v) }, label)));
 }
 function stepper(value, min, max, onChange, label) {
   const out = h('output', { 'aria-live': 'polite', 'aria-label': label }, String(value));
@@ -180,8 +180,8 @@ function climbRow(c) {
   return h('li', {}, h('a', { class: 'climb-row', href: `#/climb/${c.id}` },
     thumb,
     h('div', { class: 'grow' },
-      h('div', { class: 'title' }, `${colorName(c.color)} · ${grade(c.grade)}`),
-      h('div', { class: 'meta' }, `${c.attempts}× · ${fmtDate(c.createdAt, { hour: '2-digit', minute: '2-digit' })}`, c.projectId ? ` · ${t('climb.project')}` : '')),
+      h('div', { class: 'title' }, colorName(c.color), h('span', { class: 'grade-pill' }, grade(c.grade))),
+      h('div', { class: 'meta' }, h('span', {}, `${c.attempts}×`), h('span', {}, fmtDate(c.createdAt, { hour: '2-digit', minute: '2-digit' })), c.projectId && h('span', {}, t('climb.project')))),
     h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))));
 }
 
@@ -198,6 +198,27 @@ const ICONS = {
   lock: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z',
   gyms: 'M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
 };
+const HOLD_SHAPES = [
+  'M30 12c14-8 38-6 50 8s10 38-2 52-34 22-50 14S6 60 8 42s8-22 22-30Z',
+  'M50 8c18 0 36 14 40 32s-4 40-22 48-42 4-52-12S4 36 16 22 32 8 50 8Z',
+  'M22 20c12-14 40-14 56-2s20 38 8 54-38 20-54 10S2 52 6 38s4-6 16-18Z',
+  'M58 10c16 4 30 20 30 38s-14 34-32 40-38-2-46-18-4-36 10-48 22-16 38-12Z',
+];
+const HOLD_COLORS = ['#ff3d7f', '#ffc531', '#1fbf6a', '#2f5bff', '#ff7a1a', '#9b5cff', '#00b8d9'];
+let holdSeq = 0;
+/** Agarra em SVG. fill = cor; fillPct (0-1) enche de baixo para cima sobre a cor de fundo. */
+function hold(i, fill, { fillPct = 1, track = 'var(--surface-2)' } = {}) {
+  const d = HOLD_SHAPES[i % HOLD_SHAPES.length];
+  if (fillPct >= 1) return svg('svg', { class: 'hold', viewBox: '0 0 100 100', 'aria-hidden': 'true' }, svg('path', { d, fill }), svg('circle', { class: 'bolt', cx: 50, cy: 50, r: 5 }));
+  const id = `hg${++holdSeq}`;
+  const at = `${Math.round(fillPct * 100)}%`;
+  return svg('svg', { class: 'hold', viewBox: '0 0 100 100', 'aria-hidden': 'true' },
+    svg('defs', {}, svg('linearGradient', { id, x1: 0, y1: 1, x2: 0, y2: 0 },
+      svg('stop', { offset: at, 'stop-color': fill }), svg('stop', { offset: at, 'stop-color': track }))),
+    svg('path', { d, fill: `url(#${id})` }), svg('circle', { class: 'bolt', cx: 50, cy: 50, r: 5 }));
+}
+const KIND_COLOR = { sessions: '#2f5bff', sends: '#1fbf6a', flash: '#ffc531', grade: '#ff3d7f', projects: '#9b5cff', streak: '#ff7a1a', big: '#00b8d9', gyms: '#00b8d9' };
+
 const icon = (kind) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, svg('path', { d: ICONS[kind] }));
 
 function achLabel(id) {
@@ -221,7 +242,7 @@ function achValue(id) {
 function achBadge(a, locked = false) {
   const kind = a.id.split(':')[0];
   return h('li', { class: `ach ${locked ? 'locked' : ''}`, title: locked ? t('ach.locked') : fmtDate(a.at) },
-    h('span', { class: 'medal' }, icon(kind), h('b', { class: 'num' }, achValue(a.id))),
+    h('span', { class: 'medal' }, hold(kind.length + (a.id.length % 4), locked ? 'var(--surface-2)' : KIND_COLOR[kind]), icon(kind), h('b', { class: 'num' }, achValue(a.id))),
     h('span', { class: 'label' }, achLabel(a.id)));
 }
 
@@ -255,7 +276,8 @@ function hero() {
       h('span', { class: 'flame' }, icon('streak')),
       h('div', { class: 'grow' }, h('b', { class: 'num' }, String(n)), h('span', {}, n === 1 ? t('streak.week') : t('streak.weeks'))),
       h('div', { class: 'lv' }, h('span', { class: 'lv-badge num' }, String(lv.level)), h('span', { class: 'small' }, t('xp.level', { n: lv.level })))),
-    h('ol', { class: 'week' }, dots.map((on, i) => h('li', { class: [on && 'on', i === today && 'today'].filter(Boolean).join(' ') }, h('span', {}, wd[i])))),
+    h('ol', { class: 'week' }, dots.map((on, i) => h('li', { class: [on ? 'on' : 'off', i === today && 'today'].filter(Boolean).join(' ') },
+      hold(i, on ? HOLD_COLORS[i] : 'none'), h('span', {}, wd[i])))),
     h('div', { class: 'xp' },
       h('div', { class: 'progress' }, h('span', { style: { '--w': `${(lv.into / lv.need) * 100}%` } })),
       h('span', { class: 'small num' }, t('xp.toNext', { a: lv.into, b: lv.need }))),
@@ -283,8 +305,11 @@ function gradePathCard() {
     h('ol', { class: 'path' }, path.map((p, i) => {
       const pct = Math.min(1, p.sends / S.MASTERY);
       const state_ = p.mastered ? 'mastered' : p.unlocked ? 'open' : 'locked';
-      return h('li', { class: state_, style: { '--off': offsets[i % offsets.length] } },
-        h('span', { class: 'node', style: { '--p': `${pct * 360}deg` }, 'aria-label': `${grade(p.grade)}: ${p.sends}/${S.MASTERY}` },
+      const isNext = !p.mastered && p.unlocked && path.slice(0, i).every((q) => q.mastered);
+      const color = p.mastered ? HOLD_COLORS[p.grade % HOLD_COLORS.length] : p.unlocked ? '#2f5bff' : 'var(--surface-2)';
+      return h('li', { class: [state_, isNext && 'next'].filter(Boolean).join(' '), style: { '--off': offsets[i % offsets.length] } },
+        h('span', { class: 'node', 'aria-label': `${grade(p.grade)}: ${p.sends}/${S.MASTERY}` },
+          hold(p.grade, color, { fillPct: p.mastered ? 1 : p.unlocked ? Math.max(0.12, pct) : 1, track: 'var(--line)' }),
           h('b', { class: 'num' }, grade(p.grade))),
         h('span', { class: 'node-meta small' }, p.mastered ? [icon('check'), t('path.mastered')] : p.unlocked ? `${p.sends}/${S.MASTERY}` : icon('lock')));
     }).reverse()));
@@ -314,7 +339,7 @@ function recapSheet(s, unlocked) {
   const big = (v, label) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, label));
   openSheet(h('div', { class: 'stack celebrate' },
     h('p', { class: 'kicker' }, t('recap.title')),
-    h('p', { class: 'muted center num' }, `${gymOf(s.gymId)?.name ?? ''} · ${fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}`),
+    h('p', { class: 'muted center num' }, `${gymOf(s.gymId)?.name ?? ''}, ${fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}`),
     h('p', { class: 'xp-gain num center' }, t('xp.gain', { n: S.totalXp(cs) })),
     h('div', { class: 'kpis' },
       big(String(sum.climbs), t('recap.climbs')), big(String(sum.sends), t('recap.sends')),
@@ -413,7 +438,7 @@ function sessionHeader(s) {
       h('strong', {}, gymOf(s.gymId)?.name ?? '—'),
       h('span', { class: 'muted small' }, fmtDate(s.startedAt, { weekday: 'short', day: 'numeric', month: 'short' }))),
     h('div', { class: 'stat-line num' },
-      h('span', {}, t('session.summary', { n: s.climbs, a: s.attempts })),
+      h('span', {}, t('stat.boulders', { n: s.climbs })), h('span', {}, t('stat.attempts', { n: s.attempts })),
       s.maxGrade != null && h('span', {}, `max ${grade(s.maxGrade)}`),
       s.endedAt && h('span', {}, fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt)))),
   ];
@@ -427,10 +452,10 @@ function activeSessionView(s) {
   return h('div', { class: 'stack' },
     h('div', {},
       h('h1', {}, gymOf(s.gymId)?.name ?? '—'),
-      h('div', { class: 'stat-line num' }, elapsed, h('span', {}, t('session.summary', { n: summary.climbs, a: summary.attempts })),
+      h('div', { class: 'stat-line num' }, elapsed, h('span', {}, t('stat.boulders', { n: summary.climbs })), h('span', {}, t('stat.attempts', { n: summary.attempts })),
         summary.maxGrade != null && h('span', {}, `max ${grade(summary.maxGrade)}`),
         h('span', { class: 'xp-chip' }, t('xp.gain', { n: S.totalXp(state.climbs.filter((c) => c.sessionId === s.id)) })))),
-    h('a', { class: 'btn primary big block', href: '#/new' }, `+ ${t('session.add')}`),
+    h('a', { class: 'btn go big block', href: '#/new' }, `+ ${t('session.add')}`),
     climbs.length
       ? h('ul', { class: 'list card' }, climbs.map(climbRow))
       : h('p', { class: 'muted' }, t('session.empty')),
@@ -568,7 +593,7 @@ function viewNew() {
               else Object.assign(d, { projectId: p.root.id, color: p.root.color, grade: p.root.grade, result: 'project', canvas: null, tap: null });
               draw();
             },
-          }, swatch(p.root.color), `${grade(p.root.grade)} · ${p.attempts}×`)))),
+          }, swatch(p.root.color), h('strong', {}, grade(p.root.grade)), h('span', { class: 'muted' }, `${p.attempts}×`))))),
 
       // Foto + toque na agarra (não quando continua um projeto: usa a foto dele).
       project
@@ -658,7 +683,7 @@ function viewClimb(id) {
 
     box.replaceChildren(
       h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
-      h('h1', { class: 'row' }, swatch(cur.color), `${colorName(cur.color)} · ${grade(cur.grade)}`),
+      h('h1', { class: 'row' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
 
       r.photoType && h('div', { class: 'stage' },
         photo?.url
@@ -676,7 +701,7 @@ function viewClimb(id) {
         h('div', { class: 'row' }, h('strong', { class: 'grow' }, t('climb.attempts')),
           stepper(cur.attempts, 1, 999, debounce((n) => patchClimb({ attempts: n }), 600), t('climb.attempts'))),
         cur.note && h('p', { class: 'muted' }, cur.note),
-        h('p', { class: 'muted small' }, fmtDate(cur.createdAt, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), ' · ', gymOf(state.sessions.find((s) => s.id === cur.sessionId)?.gymId)?.name ?? '')),
+        h('p', { class: 'muted small' }, fmtDate(cur.createdAt, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), ', ', gymOf(state.sessions.find((s) => s.id === cur.sessionId)?.gymId)?.name ?? '')),
 
       proj && h('section', { class: 'card' },
         h('h2', {}, t('climb.project')),
@@ -851,7 +876,7 @@ function viewProgress() {
           h('span', { class: 'fill accent', style: { '--w': `${(p.flashes / maxPyr) * 100}%` } }),
           h('span', { class: 'fill', style: { '--w': `${((p.sends - p.flashes) / maxPyr) * 100}%` } })),
         h('span', { class: 'num muted' }, String(p.sends))))),
-      h('div', { class: 'legend' }, h('span', {}, h('i'), t('result.flash')), h('span', {}, h('i', { class: 'sent-i' }), t('result.sent')))),
+      h('div', { class: 'legend' }, h('span', {}, h('i', { class: 'flash-i' }), t('result.flash')), h('span', {}, h('i', { class: 'sent-i' }), t('result.sent')))),
 
     h('section', { class: 'card' }, h('h2', {}, t('progress.projects')),
       open.length
@@ -955,6 +980,7 @@ function showAuth() {
   $('#tabbar').hidden = true;
   $('#open-settings').hidden = true;
   view.replaceChildren(h('div', { class: 'auth' },
+    h('div', { class: 'holds-art' }, [0, 1, 2, 3].map((i) => hold(i, HOLD_COLORS[i]))),
     h('h1', {}, t('auth.title')),
     h('p', {}, t('auth.lead')),
     h('button', { class: 'btn primary big block', type: 'button', onclick: () => login() }, t('auth.login')),
