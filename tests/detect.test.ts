@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { rgbToLab } from '../web/src/color.js';
 import { holdAt, routeHolds } from '../web/src/detect.js';
 
-const box = (x: number, y: number, rgb: number[], color: string) => ({ x, y, w: 0.04, h: 0.04, lab: rgbToLab(rgb), color });
+const box = (x: number, y: number, rgb: [number, number, number], color: string) => ({ x, y, w: 0.04, h: 0.04, lab: rgbToLab(rgb), color });
 
 test('via: mesma cor medida, encadeada pela proximidade', () => {
-  const purple = [107, 63, 160], chalkyPurple = [140, 110, 180], white = [236, 236, 230];
+  const purple: [number, number, number] = [107, 63, 160];
+  const chalkyPurple: [number, number, number] = [140, 110, 180];
+  const white: [number, number, number] = [236, 236, 230];
   const seed = box(0.40, 0.80, purple, 'purple');
   const boxes = [
     seed,
