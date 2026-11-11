@@ -43,6 +43,12 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
   }
   if (has('projectId')) out.projectId = id(b.projectId, 'projectId');
   if (has('holds')) out.holds = cleanHolds(b.holds);
+  // Projeto encerrado sem mandar (a via saiu / desistiu); a data vem do servidor.
+  if (partial && has('dropped')) {
+    if (typeof b.dropped !== 'boolean') bad('dropped');
+    out.dropped = b.dropped;
+    out.droppedAt = b.dropped ? nowIso() : null;
+  }
   if (partial && has('ai')) {
     // Correções manuais do resultado da IA: mesmo saneamento da saída do modelo.
     const a = b.ai as Record<string, unknown>;

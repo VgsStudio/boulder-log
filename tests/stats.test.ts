@@ -108,3 +108,14 @@ test('projeto editado para "mandou" continua projeto (concluído)', async () => 
   assert.equal(p.attempts, 4);
   assert.ok(p.sentAt);
 });
+
+test('projeto aberto: some ao desistir ou depois de 45 dias parado', async () => {
+  const { projects, isOpenProject } = await import('../web/src/stats.js');
+  const now = Date.parse('2026-11-12T12:00:00');
+  const [p] = projects([c('a', '2026-11-02', 5, 'project')]);
+  assert.equal(isOpenProject(p, now), true);
+  const [gone] = projects([c('a', '2026-11-02', 5, 'project', { dropped: true })]);
+  assert.equal(isOpenProject(gone, now), false);
+  const [old] = projects([c('a', '2026-09-01', 5, 'project')]);
+  assert.equal(isOpenProject(old, now), false);
+});

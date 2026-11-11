@@ -10,3 +10,11 @@ test('validação do boulder: aceita o esperado, recusa o resto', () => {
   assert.throws(() => cleanHolds([{ x: 2, y: 0, w: 0.1, h: 0.1 }]), /INVALID_HOLDS/);
   assert.throws(() => cleanHolds(Array(81).fill({ x: 0, y: 0, w: 0.1, h: 0.1 })), /INVALID_HOLDS/);
 });
+
+test('desistir do projeto: só boolean e só em edição', () => {
+  const out = cleanClimb({ dropped: true }, true);
+  assert.equal(out.dropped, true);
+  assert.ok(typeof out.droppedAt === 'string');
+  assert.equal(cleanClimb({ dropped: false }, true).droppedAt, null);
+  assert.throws(() => cleanClimb({ dropped: 'sim' }, true), /INVALID_DROPPED/);
+});

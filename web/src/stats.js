@@ -86,6 +86,8 @@ export function projects(climbs) {
       attempts: tries.reduce((n, c) => n + c.attempts, 0),
       sessions: new Set(tries.map((c) => c.sessionId)).size,
       sentAt: sent?.createdAt ?? null,
+      dropped: Boolean(root.dropped),
+      lastAt: tries[tries.length - 1].createdAt,
     };
   });
 }
@@ -225,3 +227,8 @@ export function nearestGym(gyms, pos, maxKm = 0.5) {
   const near = gyms.filter((g) => g.loc).map((g) => ({ g, d: distanceKm(g.loc, pos) })).sort((a, b) => a.d - b.d)[0];
   return near && near.d <= maxKm ? near.g : null;
 }
+
+/** Projeto aberto de verdade: não mandado, não desistido e com tentativa nos últimos 45 dias
+ *  (depois disso o ginásio provavelmente já trocou a via). */
+export const isOpenProject = (p, now = Date.now()) =>
+  !p.sentAt && !p.dropped && now - Date.parse(p.lastAt) <= 45 * 86400_000;

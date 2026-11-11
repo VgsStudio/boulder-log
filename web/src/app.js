@@ -55,6 +55,7 @@ const fail = (e) => {
   toast(e?.code === 'AI_DAILY_LIMIT' ? t('ai.limit') : e?.code === 'AI_UNAVAILABLE' || e?.code === 'AI_FAILED' ? t('ai.unavailable') : navigator.onLine ? t('error.generic') : t('error.offline'));
 };
 
+const sessionsText = (n) => (n === 1 ? t('unit.session1') : t('unit.sessions', { n }));
 const colorName = (c) => t(`color.${c}`);
 const grade = (g) => S.gradeLabel(g, state.settings.scale);
 const swatch = (c) => h('span', { class: `swatch ${c === 'other' ? 'other' : ''}`, style: c === 'other' ? null : { background: SWATCH[c] } });
@@ -187,7 +188,7 @@ function climbRow(c) {
     thumb,
     h('div', { class: 'grow' },
       h('div', { class: 'title' }, colorName(c.color), h('span', { class: 'grade-pill' }, grade(c.grade))),
-      h('div', { class: 'meta' }, h('span', {}, `${c.attempts}×`), h('span', {}, fmtDate(c.createdAt, { hour: '2-digit', minute: '2-digit' })), c.projectId && h('span', {}, t('climb.project')))),
+      h('div', { class: 'meta' }, h('span', {}, fmtDate(c.createdAt, { hour: '2-digit', minute: '2-digit' })), c.projectId && h('span', {}, t('climb.project')))),
     h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))));
 }
 
@@ -444,7 +445,7 @@ function sessionHeader(s) {
       h('strong', {}, gymOf(s.gymId)?.name ?? '—'),
       h('span', { class: 'muted small' }, fmtDate(s.startedAt, { weekday: 'short', day: 'numeric', month: 'short' }))),
     h('div', { class: 'stat-line num' },
-      h('span', {}, t('stat.boulders', { n: s.climbs })), h('span', {}, t('stat.attempts', { n: s.attempts })),
+      h('span', {}, t('stat.boulders', { n: s.climbs })), h('span', {}, t('stat.sends', { n: s.sends })),
       s.maxGrade != null && h('span', {}, `max ${grade(s.maxGrade)}`),
       s.endedAt && h('span', {}, fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt)))),
   ];
@@ -458,7 +459,7 @@ function activeSessionView(s) {
   return h('div', { class: 'stack' },
     h('div', {},
       h('h1', {}, gymOf(s.gymId)?.name ?? '—'),
-      h('div', { class: 'stat-line num' }, elapsed, h('span', {}, t('stat.boulders', { n: summary.climbs })), h('span', {}, t('stat.attempts', { n: summary.attempts })),
+      h('div', { class: 'stat-line num' }, elapsed, h('span', {}, t('stat.boulders', { n: summary.climbs })), h('span', {}, t('stat.sends', { n: summary.sends })),
         summary.maxGrade != null && h('span', {}, `max ${grade(summary.maxGrade)}`),
         h('span', { class: 'xp-chip' }, t('xp.gain', { n: S.totalXp(state.climbs.filter((c) => c.sessionId === s.id)) })))),
     h('a', { class: 'btn go big block', href: '#/new' }, `+ ${t('session.add')}`),
@@ -537,7 +538,7 @@ function viewNew() {
   const d = { color: null, grade: lastGrade, attempts: 1, result: 'sent', note: '', tap: null, projectId: null, canvas: null, lab: null, suggestion: null,
     boxes: null, rgba: null, seed: null, route: null, detect: null };
   const palette = gym?.palette ?? {};
-  const openProjects = S.projects(state.climbs).filter((p) => !p.sentAt);
+  const openProjects = S.projects(state.climbs).filter(S.isOpenProject);
 
   const root = h('div', { class: 'stack' });
   const draw = () => fill(root, parts());
@@ -666,7 +667,7 @@ function viewNew() {
               else Object.assign(d, { projectId: p.root.id, color: p.root.color, grade: p.root.grade, result: 'project', canvas: null, tap: null });
               draw();
             },
-          }, swatch(p.root.color), h('strong', {}, grade(p.root.grade)), h('span', { class: 'muted' }, `${p.attempts}×`))))),
+          }, swatch(p.root.color), h('strong', {}, grade(p.root.grade)), h('span', { class: 'muted' }, sessionsText(p.sessions)))))),
 
       // Foto + toque na agarra (não quando continua um projeto: usa a foto dele).
       project
@@ -705,10 +706,8 @@ function viewNew() {
           h('button', { class: 'chip grade', type: 'button', 'aria-pressed': String(d.grade === g), onclick: () => { d.grade = g; draw(); } }, grade(g))))),
 
       h('section', {}, h('h2', {}, t('climb.result')),
-        seg(RESULTS.map((r) => [r, t(`result.${r}`)]), d.result, (r) => { d.result = r; if (r === 'flash') d.attempts = 1; draw(); })),
+        seg(RESULTS.map((r) => [r, t(`result.${r}`)]), d.result, (r) => { d.result = r; draw(); })),
 
-      h('section', { class: 'row' }, h('h2', { class: 'grow' }, t('climb.attempts')),
-        stepper(d.attempts, 1, 999, (n) => { d.attempts = n; if (n > 1 && d.result === 'flash') { d.result = 'sent'; draw(); } }, t('climb.attempts'))),
 
       h('label', { class: 'field' }, h('span', {}, t('climb.note')),
         h('textarea', { maxlength: 500, value: d.note, oninput: (e) => (d.note = e.target.value) })),
@@ -805,9 +804,7 @@ function viewClimb(id) {
         r.tap && h('span', { class: 'marker', style: { '--x': `${r.tap.x * 100}%`, '--y': `${r.tap.y * 100}%` } })),
 
       h('section', { class: 'card stack' },
-        seg(RESULTS.map((x) => [x, t(`result.${x}`)]), cur.result, (x) => patchClimb({ result: x, ...(x === 'flash' ? { attempts: 1 } : {}) })),
-        h('div', { class: 'row' }, h('strong', { class: 'grow' }, t('climb.attempts')),
-          stepper(cur.attempts, 1, 999, debounce((n) => patchClimb({ attempts: n }), 600), t('climb.attempts'))),
+        seg(RESULTS.map((x) => [x, t(`result.${x}`)]), cur.result, (x) => patchClimb({ result: x })),
         cur.note && h('p', { class: 'muted' }, cur.note),
         h('p', { class: 'muted small' }, fmtDate(cur.createdAt, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), ', ', gymOf(state.sessions.find((s) => s.id === cur.sessionId)?.gymId)?.name ?? '')),
 
@@ -815,11 +812,16 @@ function viewClimb(id) {
         h('h2', {}, t('climb.project')),
         h('p', { class: 'num' }, proj.sentAt
           ? t('climb.projectSent', { d: fmtDate(proj.sentAt, { day: 'numeric', month: 'long' }) })
-          : t('climb.projectProgress', { a: proj.attempts, s: proj.sessions })),
+          : proj.dropped ? t('project.droppedOn', { d: fmtDate(r.droppedAt ?? r.createdAt, { day: 'numeric', month: 'long' }) })
+            : t('climb.projectProgress', { s: sessionsText(proj.sessions) })),
         // Projeto aberto: registrar a nova tentativa direto daqui, na sessão de hoje.
-        !proj.sentAt && h('div', { class: 'row project-actions' },
+        !proj.sentAt && !proj.dropped && h('div', { class: 'row project-actions' },
           h('button', { class: 'btn go big grow', type: 'button', onclick: (e) => logTry(r, 'sent', e.currentTarget) }, t('project.sent')),
           h('button', { class: 'btn big grow', type: 'button', onclick: (e) => logTry(r, 'project', e.currentTarget) }, t('project.again'))),
+        !proj.sentAt && h('button', {
+          class: 'btn ghost block', type: 'button',
+          onclick: () => api(`/climbs/${r.id}`, { method: 'PATCH', body: { dropped: !proj.dropped } }).then((x) => { upsert(state.climbs, x); draw(); }, fail),
+        }, proj.dropped ? t('project.reopen') : t('project.drop')),
         h('ul', { class: 'list' }, tries.map(climbRow))),
 
       r.photoType && h('section', { class: 'card stack' },
@@ -952,7 +954,7 @@ function viewProgress() {
   const weekly = S.weeklyGrades(state.climbs).slice(-12);
   const volume = S.sessionSummaries(state.sessions, state.climbs).slice(0, 12).reverse();
   const pyr = S.pyramid(state.climbs);
-  const open = S.projects(state.climbs).filter((p) => !p.sentAt);
+  const open = S.projects(state.climbs).filter(S.isOpenProject);
   const styles = S.styleStats(state.climbs);
 
   const kpi = (value, label) => h('div', { class: 'kpi' }, h('b', {}, value), h('span', {}, label));
@@ -1009,7 +1011,7 @@ function viewProgress() {
 
 function climbRowProject(p) {
   const row = climbRow(p.root);
-  row.querySelector('.meta').textContent = t('climb.projectProgress', { a: p.attempts, s: p.sessions });
+  row.querySelector('.meta').textContent = t('climb.projectProgress', { s: sessionsText(p.sessions) });
   return row;
 }
 
