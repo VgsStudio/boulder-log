@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151514" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Boulder Log">
+  <title>Boulder Log</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/assets/__CSS__">
+  <script type="module" src="/assets/__JS__"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 25 13 9l5 9 3-5 5 12Z"/></svg>Boulder Log</a>
+    <div class="row">
+    <span class="streak-pill num" id="streak-pill" hidden></span>
+    <button class="icon-btn" id="open-settings" type="button" hidden aria-label="Ajustes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <nav class="tabbar" id="tabbar" hidden>
+    <a href="#/" data-tab="session">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 10 6l4 7 2-3 4 10Z"/></svg><span data-t="tab.session"></span>
+    </a>
+    <a href="#/history" data-tab="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span data-t="tab.history"></span>
+    </a>
+    <a href="#/progress" data-tab="progress">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 16l4-5 3 3 5-7"/></svg><span data-t="tab.progress"></span>
+    </a>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog class="sheet" id="sheet"></dialog>
+</body>
+</html>

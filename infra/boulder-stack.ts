@@ -1,0 +1,268 @@
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CfnOutput, Duration, Fn, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
+import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as budgets from 'aws-cdk-lib/aws-budgets';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as r53targets from 'aws-cdk-lib/aws-route53-targets';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import type { Construct } from 'constructs';
+
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+export interface BoulderStackProps extends StackProps {
+  zoneName: string;
+  hostedZoneId?: string;
+  domainName: string;
+  cognitoDomainPrefix: string;
+  aiModel: string;
+  aiDailyLimit: number;
+  alertEmail?: string;
+}
+
+/** Boulder Log: site (CloudFront + S3), API (HTTP API + 1 Lambda), dados (DynamoDB),
+ *  fotos (S3 privado, upload/download assinados), login (Cognito) e IA (Bedrock). */
+export class BoulderStack extends Stack {
+  constructor(scope: Construct, id: string, props: BoulderStackProps) {
+    super(scope, id, props);
+    const origin = `https://${props.domainName}`;
+
+    // ---------- Dados ----------
+    // Dados do usuário: nada de DESTROY aqui.
+    const table = new dynamodb.TableV2(this, 'Table', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billing: dynamodb.Billing.onDemand(),
+      timeToLiveAttribute: 'ttl',
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+
+    const photos = new s3.Bucket(this, 'Photos', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.RETAIN,
+      cors: [{ allowedOrigins: [origin], allowedMethods: [s3.HttpMethods.POST, s3.HttpMethods.GET], allowedHeaders: ['*'], maxAge: 3600 }],
+      lifecycleRules: [{ abortIncompleteMultipartUploadAfter: Duration.days(1) }],
+    });
+    const webBucket = new s3.Bucket(this, 'Web', {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    // ---------- Lambda (uma só, roteada por routeKey) ----------
+    const apiFn = new NodejsFunction(this, 'ApiFn', {
+      entry: path.join(ROOT, 'services', 'api.ts'),
+      handler: 'handler',
+      projectRoot: ROOT,
+      depsLockFilePath: path.join(ROOT, 'package-lock.json'),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: Duration.seconds(29), // limite do HTTP API; a análise de IA leva poucos segundos
+      environment: {
+        TABLE_NAME: table.tableName,
+        PHOTO_BUCKET: photos.bucketName,
+        ALLOWED_ORIGIN: origin,
+        AI_MODEL: props.aiModel,
+        AI_DAILY_LIMIT: String(props.aiDailyLimit),
+      },
+      logGroup: new logs.LogGroup(this, 'ApiFnLogs', { retention: logs.RetentionDays.TWO_WEEKS, removalPolicy: RemovalPolicy.DESTROY }),
+      bundling: { minify: true, externalModules: [] },
+    });
+    table.grantReadWriteData(apiFn);
+    photos.grantReadWrite(apiFn, 'photos/*');
+    photos.grantDelete(apiFn, 'photos/*');
+    // ponytail: recurso '*' porque o formato do ARN de modelo no bedrock-mantle não é estável;
+    // a Lambda só chama o modelo de AI_MODEL e a cota diária limita o uso.
+    apiFn.addToRolePolicy(new iam.PolicyStatement({ actions: ['bedrock-mantle:CreateInference'], resources: ['*'] }));
+
+    // ---------- Login (Cognito Managed Login com a cara do app) ----------
+    const userPool = new cognito.UserPool(this, 'Users', {
+      userPoolName: 'boulder-log',
+      selfSignUpEnabled: true,
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+      standardAttributes: { email: { required: true, mutable: true } },
+      mfa: cognito.Mfa.OFF,
+      passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      removalPolicy: RemovalPolicy.RETAIN,
+    });
+    userPool.addDomain('Domain', {
+      cognitoDomain: { domainPrefix: props.cognitoDomainPrefix },
+      managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
+    });
+    const redirect = `${origin}/`;
+    const client = userPool.addClient('Spa', {
+      generateSecret: false,
+      authFlows: {},
+      oAuth: {
+        flows: { authorizationCodeGrant: true },
+        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
+        callbackUrls: [redirect],
+        logoutUrls: [redirect],
+      },
+      preventUserExistenceErrors: true,
+      accessTokenValidity: Duration.hours(1),
+      idTokenValidity: Duration.hours(1),
+      refreshTokenValidity: Duration.days(30),
+    });
+    // Mesmas cores do app; DYNAMIC segue o tema claro/escuro do aparelho.
+    const btn = (bg: string, hover: string, active: string) => ({
+      defaults: { backgroundColor: bg, textColor: 'ffffffff' },
+      hover: { backgroundColor: hover, textColor: 'ffffffff' },
+      active: { backgroundColor: active, textColor: 'ffffffff' },
+    });
+    new cognito.CfnManagedLoginBranding(this, 'LoginBranding', {
+      userPoolId: userPool.userPoolId,
+      clientId: client.userPoolClientId,
+      settings: {
+        categories: {
+          global: { colorSchemeMode: 'DYNAMIC' },
+          form: { displayGraphics: false },
+        },
+        components: {
+          pageBackground: { image: { enabled: false }, lightMode: { color: 'f6f5f2ff' }, darkMode: { color: '151514ff' } },
+          form: {
+            borderRadius: 12,
+            lightMode: { backgroundColor: 'ffffffff', borderColor: 'e4e2ddff' },
+            darkMode: { backgroundColor: '1f1f1dff', borderColor: '2e2e2bff' },
+          },
+          primaryButton: {
+            lightMode: btn('c4502aff', 'a94322ff', '8f381cff'),
+            darkMode: btn('e0663cff', 'ea7a52ff', 'c4502aff'),
+          },
+        },
+      },
+    });
+
+    // ---------- API ----------
+    const httpApi = new apigwv2.HttpApi(this, 'HttpApi', { createDefaultStage: false });
+    new apigwv2.HttpStage(this, 'Stage', { httpApi, stageName: '$default', autoDeploy: true, throttle: { rateLimit: 20, burstLimit: 40 } });
+    const integration = new HttpLambdaIntegration('ApiInt', apiFn);
+    const authorizer = new HttpUserPoolAuthorizer('Auth', userPool, { userPoolClients: [client] });
+    const M = apigwv2.HttpMethod;
+    const routes: [string, apigwv2.HttpMethod][] = [
+      ['/api/gyms', M.GET], ['/api/gyms', M.POST], ['/api/gyms/{id}', M.PATCH],
+      ['/api/sessions', M.GET], ['/api/sessions', M.POST], ['/api/sessions/{id}', M.PATCH],
+      ['/api/climbs', M.GET], ['/api/climbs', M.POST],
+      ['/api/climbs/{id}', M.PATCH], ['/api/climbs/{id}', M.DELETE],
+      ['/api/climbs/{id}/media', M.GET], ['/api/climbs/{id}/analyze', M.POST],
+      ['/api/settings', M.GET], ['/api/settings', M.PUT],
+    ];
+    for (const [p, method] of routes) httpApi.addRoutes({ path: p, methods: [method], integration, authorizer });
+
+    // ---------- Site: CloudFront com S3 e a API na mesma origem ----------
+    const zone = props.hostedZoneId
+      ? route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', { hostedZoneId: props.hostedZoneId, zoneName: props.zoneName })
+      : route53.HostedZone.fromLookup(this, 'Zone', { domainName: props.zoneName });
+    const certificate = new acm.Certificate(this, 'Cert', { domainName: props.domainName, validation: acm.CertificateValidation.fromDns(zone) });
+    const cognitoDomain = `https://${props.cognitoDomainPrefix}.auth.${this.region}.amazoncognito.com`;
+    const s3Hosts = `https://${photos.bucketName}.s3.amazonaws.com https://${photos.bucketName}.s3.${this.region}.amazonaws.com`;
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self'",
+      `img-src 'self' blob: data: ${s3Hosts}`,
+      `connect-src 'self' ${s3Hosts} ${cognitoDomain}`,
+      "manifest-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "form-action 'self'",
+    ].join('; ');
+    const headers = new cloudfront.ResponseHeadersPolicy(this, 'SecurityHeaders', {
+      securityHeadersBehavior: {
+        contentSecurityPolicy: { contentSecurityPolicy: csp, override: true },
+        strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: false, override: true },
+        contentTypeOptions: { override: true },
+        frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
+        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+      },
+    });
+    const distribution = new cloudfront.Distribution(this, 'Cdn', {
+      domainNames: [props.domainName],
+      certificate,
+      defaultRootObject: 'index.html',
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(webBucket),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED, // gzip + brotli
+        responseHeadersPolicy: headers,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: new origins.HttpOrigin(Fn.select(2, Fn.split('/', httpApi.apiEndpoint))),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          responseHeadersPolicy: headers,
+        },
+      },
+    });
+    const alias = route53.RecordTarget.fromAlias(new r53targets.CloudFrontTarget(distribution));
+    new route53.ARecord(this, 'AliasA', { zone, recordName: props.domainName, target: alias });
+    new route53.AaaaRecord(this, 'AliasAAAA', { zone, recordName: props.domainName, target: alias });
+
+    // ---------- Publicação do site ----------
+    // Assets com hash no nome: cache de 1 ano. Páginas e config: sempre revalidadas.
+    // prune: false nos dois para abas abertas não perderem o JS da versão anterior.
+    const dist = path.join(ROOT, 'dist');
+    new s3deploy.BucketDeployment(this, 'DeployAssets', {
+      sources: [s3deploy.Source.asset(path.join(dist, 'static'))],
+      destinationBucket: webBucket,
+      cacheControl: [s3deploy.CacheControl.fromString('public, max-age=31536000, immutable')],
+      prune: false,
+    });
+    new s3deploy.BucketDeployment(this, 'DeployPages', {
+      sources: [
+        s3deploy.Source.asset(path.join(dist, 'pages')),
+        s3deploy.Source.jsonData('config.json', {
+          cognitoDomain,
+          clientId: client.userPoolClientId,
+          redirectUri: redirect,
+        }),
+      ],
+      destinationBucket: webBucket,
+      cacheControl: [s3deploy.CacheControl.fromString('no-cache')],
+      prune: false,
+      distribution,
+      distributionPaths: ['/*'],
+    });
+
+    // ---------- Alerta de custo ----------
+    if (props.alertEmail) {
+      new budgets.CfnBudget(this, 'Budget', {
+        budget: { budgetName: 'boulder-log-monthly', budgetType: 'COST', timeUnit: 'MONTHLY', budgetLimit: { amount: 5, unit: 'USD' } },
+        notificationsWithSubscribers: [{
+          notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80, thresholdType: 'PERCENTAGE' },
+          subscribers: [{ subscriptionType: 'EMAIL', address: props.alertEmail }],
+        }],
+      });
+    }
+
+    new CfnOutput(this, 'Url', { value: origin });
+    new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId });
+    new CfnOutput(this, 'TableName', { value: table.tableName });
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "boulder-log",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "cdk": "cdk",
+    "cdk:synth": "cdk synth --quiet",
+    "deploy": "cdk deploy --all"
+  },
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^1.1.2",
+    "@aws-sdk/client-dynamodb": "^3.1167.0",
+    "@aws-sdk/client-s3": "^3.1167.0",
+    "@aws-sdk/lib-dynamodb": "^3.1167.0",
+    "@aws-sdk/s3-presigned-post": "^3.1167.0",
+    "@aws-sdk/s3-request-presigner": "^3.1167.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "aws-cdk": "^2.1148.1",
+    "aws-cdk-lib": "^2.276.0",
+    "constructs": "^10.8.1",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

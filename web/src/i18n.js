@@ -1,0 +1,103 @@
+// Português ou inglês, conforme o idioma do aparelho.
+export const lang = (navigator.language || 'en').toLowerCase().startsWith('pt') ? 'pt' : 'en';
+document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+
+const dict = {
+  pt: {
+    'tab.session': 'Sessão', 'tab.history': 'Histórico', 'tab.progress': 'Evolução',
+    'auth.title': 'Seu diário de boulder', 'auth.lead': 'Registre cada via, acompanhe seus projetos e veja sua evolução.', 'auth.login': 'Entrar', 'auth.signup': 'Criar conta',
+    'session.ready': 'Pronto para escalar?', 'session.gym': 'Ginásio', 'session.newGym': 'Novo ginásio', 'session.gymName': 'Nome do ginásio',
+    'session.start': 'Começar sessão', 'session.add': 'Registrar boulder', 'session.end': 'Encerrar sessão',
+    'session.feeling': 'Como foi a sessão?', 'session.save': 'Salvar e encerrar', 'session.empty': 'Nenhum boulder ainda. Bora!',
+    'session.last': 'Última sessão', 'session.summary': '{n} boulders · {a} tentativas',
+    'climb.new': 'Novo boulder', 'climb.photo': 'Tirar ou escolher foto', 'climb.retake': 'Trocar foto',
+    'climb.tapHint': 'Toque numa agarra da via para identificar a cor.',
+    'climb.suggest': 'Parece {c}', 'climb.or': 'ou {c}', 'climb.calibrate': 'Usar como referência de {c} neste ginásio', 'climb.calibrated': 'Referência salva.',
+    'climb.color': 'Cor', 'climb.grade': 'Grau', 'climb.attempts': 'Tentativas', 'climb.result': 'Resultado', 'climb.note': 'Anotação',
+    'climb.save': 'Salvar', 'climb.saving': 'Salvando…', 'climb.continue': 'Continuar um projeto',
+    'climb.project': 'Projeto', 'climb.projectProgress': '{a} tentativas em {s} sessões', 'climb.projectSent': 'Mandado em {d}',
+    'climb.history': 'Tentativas', 'climb.delete': 'Excluir', 'climb.confirmDelete': 'Toque de novo para excluir',
+    'result.flash': 'Flash', 'result.sent': 'Mandou', 'result.project': 'Projeto',
+    'ai.analyze': 'Analisar com IA', 'ai.analyzing': 'Analisando…', 'ai.title': 'Análise da IA', 'ai.disclaimer': 'Sugestão automática; toque para corrigir.',
+    'ai.angle': 'Parede', 'ai.holds': 'Agarras', 'ai.style': 'Estilo', 'ai.limit': 'Limite diário de análises atingido.', 'ai.unavailable': 'IA indisponível no momento. Tente mais tarde.',
+    'history.sessions': 'Sessões', 'history.gallery': 'Galeria', 'history.empty': 'Suas sessões aparecem aqui.', 'history.all': 'Todas',
+    'progress.empty': 'Registre algumas sessões para ver sua evolução.',
+    'progress.max': 'Grau máx. (30 dias)', 'progress.sessions': 'Sessões (30 dias)', 'progress.flash': 'Taxa de flash', 'progress.streak': 'Semanas seguidas',
+    'progress.weekly': 'Grau por semana', 'progress.weeklyMax': 'máximo', 'progress.weeklyMedian': 'mediana',
+    'progress.volume': 'Volume por sessão', 'progress.pyramid': 'Pirâmide de graus', 'progress.projects': 'Projetos abertos', 'progress.noProjects': 'Nenhum projeto aberto.',
+    'progress.styles': 'Onde você manda e onde trava', 'progress.stylesHint': 'Com base nas fotos analisadas pela IA.', 'progress.sends': 'mandadas', 'progress.open': 'em projeto',
+    'ach.title': 'Conquistas', 'ach.count': '{n} desbloqueadas', 'ach.new': 'Conquista desbloqueada', 'ach.newMany': '{n} conquistas desbloqueadas', 'ach.pr': 'Novo recorde!', 'ach.prLead': 'Você mandou {g} pela primeira vez.',
+    'ach.session1': 'Primeira sessão', 'ach.sessions': '{n} sessões', 'ach.sends': '{n} boulders mandados', 'ach.flash1': 'Primeiro flash', 'ach.flash': '{n} flashes', 'ach.grade': 'Mandou {g}',
+    'ach.project1': 'Primeiro projeto mandado', 'ach.projects': '{n} projetos mandados', 'ach.streak': '{n} semanas seguidas', 'ach.big': 'Sessão com 10+ boulders', 'ach.locked': 'Bloqueada',
+    'streak.weeks': 'semanas seguidas', 'streak.week': 'semana seguida', 'streak.start': 'Escale esta semana para começar uma sequência.', 'streak.keep': 'Escale esta semana para não perder a sequência!', 'streak.done': 'Semana garantida. Sequência mantida.',
+    'recap.title': 'Sessão encerrada', 'recap.climbs': 'boulders', 'recap.sends': 'mandados', 'recap.flash': 'flashes', 'recap.max': 'grau máx.', 'recap.close': 'Fechar', 'nice': 'Boa!',
+    'ach.gyms': '{n} ginásios diferentes', 'session.detected': 'Ginásio reconhecido pela localização',
+    'xp.level': 'Nível {n}', 'xp.toNext': '{a} / {b} XP', 'xp.gain': '+{n} XP', 'xp.levelUp': 'Subiu para o nível {n}!',
+    'path.title': 'Trilha de graus', 'path.hint': 'Mande {m} vias de um grau para dominá-lo e abrir o próximo desafio.', 'path.mastered': 'Dominado',
+    'settings.goals': 'Metas', 'settings.weekly': 'Sessões por semana', 'settings.gradeGoal': 'Grau para mandar', 'settings.none': 'Nenhuma', 'settings.save': 'Salvar',
+    'goal.week': 'Meta da semana', 'goal.weekProgress': '{n} de {g} sessões', 'goal.grade': 'Meta de grau', 'goal.gradeDone': 'Meta batida em {d}!', 'goal.gradeBest': 'Seu melhor: {g}', 'goal.set': 'Definir metas',
+    'calendar.title': 'Dias escalados', 'calendar.days': '{n} dias neste mês',
+    'settings.title': 'Ajustes', 'settings.scale': 'Escala de grau', 'settings.logout': 'Sair', 'settings.close': 'Fechar',
+    'error.generic': 'Algo deu errado. Tente de novo.', 'error.offline': 'Sem conexão.', 'back': 'Voltar', 'cancel': 'Cancelar',
+    'color.green': 'Verde', 'color.purple': 'Roxa', 'color.yellow': 'Amarela', 'color.white': 'Branca', 'color.wood': 'Madeira', 'color.red': 'Vermelha',
+    'color.blue': 'Azul', 'color.black': 'Preta', 'color.orange': 'Laranja', 'color.pink': 'Rosa', 'color.other': 'Outra',
+    'hold.crimp': 'Crimp', 'hold.sloper': 'Sloper', 'hold.jug': 'Agarrão', 'hold.pinch': 'Pinça', 'hold.pocket': 'Buraco', 'hold.volume': 'Volume', 'hold.edge': 'Régua',
+    'angle.slab': 'Positiva', 'angle.vertical': 'Vertical', 'angle.overhang': 'Negativa', 'angle.roof': 'Teto',
+    'style.dynamic': 'Dinâmico', 'style.static': 'Estático', 'style.compression': 'Compressão', 'style.balance': 'Equilíbrio', 'style.power': 'Força',
+    'style.technical': 'Técnico', 'style.coordination': 'Coordenação', 'style.heel_hook': 'Calcanhar', 'style.toe_hook': 'Peito de pé', 'style.mantle': 'Mantle',
+  },
+  en: {
+    'tab.session': 'Session', 'tab.history': 'History', 'tab.progress': 'Progress',
+    'auth.title': 'Your bouldering log', 'auth.lead': 'Log every problem, follow your projects and see how you improve.', 'auth.login': 'Sign in', 'auth.signup': 'Create account',
+    'session.ready': 'Ready to climb?', 'session.gym': 'Gym', 'session.newGym': 'New gym', 'session.gymName': 'Gym name',
+    'session.start': 'Start session', 'session.add': 'Log a boulder', 'session.end': 'End session',
+    'session.feeling': 'How did it go?', 'session.save': 'Save and end', 'session.empty': 'No boulders yet. Go climb!',
+    'session.last': 'Last session', 'session.summary': '{n} boulders · {a} attempts',
+    'climb.new': 'New boulder', 'climb.photo': 'Take or choose a photo', 'climb.retake': 'Change photo',
+    'climb.tapHint': 'Tap a hold of the problem to detect its color.',
+    'climb.suggest': 'Looks {c}', 'climb.or': 'or {c}', 'climb.calibrate': 'Use as the {c} reference for this gym', 'climb.calibrated': 'Reference saved.',
+    'climb.color': 'Color', 'climb.grade': 'Grade', 'climb.attempts': 'Attempts', 'climb.result': 'Result', 'climb.note': 'Note',
+    'climb.save': 'Save', 'climb.saving': 'Saving…', 'climb.continue': 'Continue a project',
+    'climb.project': 'Project', 'climb.projectProgress': '{a} attempts over {s} sessions', 'climb.projectSent': 'Sent on {d}',
+    'climb.history': 'Attempts', 'climb.delete': 'Delete', 'climb.confirmDelete': 'Tap again to delete',
+    'result.flash': 'Flash', 'result.sent': 'Sent', 'result.project': 'Project',
+    'ai.analyze': 'Analyze with AI', 'ai.analyzing': 'Analyzing…', 'ai.title': 'AI analysis', 'ai.disclaimer': 'Automatic suggestion; tap to fix.',
+    'ai.angle': 'Wall', 'ai.holds': 'Holds', 'ai.style': 'Style', 'ai.limit': 'Daily analysis limit reached.', 'ai.unavailable': 'AI is unavailable right now. Try again later.',
+    'history.sessions': 'Sessions', 'history.gallery': 'Gallery', 'history.empty': 'Your sessions show up here.', 'history.all': 'All',
+    'progress.empty': 'Log a few sessions to see your progress.',
+    'progress.max': 'Top grade (30 days)', 'progress.sessions': 'Sessions (30 days)', 'progress.flash': 'Flash rate', 'progress.streak': 'Week streak',
+    'progress.weekly': 'Grade by week', 'progress.weeklyMax': 'top', 'progress.weeklyMedian': 'median',
+    'progress.volume': 'Volume per session', 'progress.pyramid': 'Grade pyramid', 'progress.projects': 'Open projects', 'progress.noProjects': 'No open projects.',
+    'progress.styles': 'Where you send and where you get stuck', 'progress.stylesHint': 'Based on photos analyzed by AI.', 'progress.sends': 'sent', 'progress.open': 'projecting',
+    'ach.title': 'Achievements', 'ach.count': '{n} unlocked', 'ach.new': 'Achievement unlocked', 'ach.newMany': '{n} achievements unlocked', 'ach.pr': 'New personal best!', 'ach.prLead': 'You sent {g} for the first time.',
+    'ach.session1': 'First session', 'ach.sessions': '{n} sessions', 'ach.sends': '{n} boulders sent', 'ach.flash1': 'First flash', 'ach.flash': '{n} flashes', 'ach.grade': 'Sent {g}',
+    'ach.project1': 'First project sent', 'ach.projects': '{n} projects sent', 'ach.streak': '{n}-week streak', 'ach.big': '10+ boulder session', 'ach.locked': 'Locked',
+    'streak.weeks': 'week streak', 'streak.week': 'week streak', 'streak.start': 'Climb this week to start a streak.', 'streak.keep': 'Climb this week to keep your streak!', 'streak.done': 'Week secured. Streak kept.',
+    'recap.title': 'Session done', 'recap.climbs': 'boulders', 'recap.sends': 'sent', 'recap.flash': 'flashes', 'recap.max': 'top grade', 'recap.close': 'Close', 'nice': 'Nice!',
+    'ach.gyms': '{n} different gyms', 'session.detected': 'Gym recognized from your location',
+    'xp.level': 'Level {n}', 'xp.toNext': '{a} / {b} XP', 'xp.gain': '+{n} XP', 'xp.levelUp': 'Level {n} reached!',
+    'path.title': 'Grade path', 'path.hint': 'Send {m} problems at a grade to master it and unlock the next challenge.', 'path.mastered': 'Mastered',
+    'settings.goals': 'Goals', 'settings.weekly': 'Sessions per week', 'settings.gradeGoal': 'Grade to send', 'settings.none': 'None', 'settings.save': 'Save',
+    'goal.week': 'Weekly goal', 'goal.weekProgress': '{n} of {g} sessions', 'goal.grade': 'Grade goal', 'goal.gradeDone': 'Goal reached on {d}!', 'goal.gradeBest': 'Your best: {g}', 'goal.set': 'Set goals',
+    'calendar.title': 'Climbing days', 'calendar.days': '{n} days this month',
+    'settings.title': 'Settings', 'settings.scale': 'Grade scale', 'settings.logout': 'Sign out', 'settings.close': 'Close',
+    'error.generic': 'Something went wrong. Try again.', 'error.offline': 'You are offline.', 'back': 'Back', 'cancel': 'Cancel',
+    'color.green': 'Green', 'color.purple': 'Purple', 'color.yellow': 'Yellow', 'color.white': 'White', 'color.wood': 'Wood', 'color.red': 'Red',
+    'color.blue': 'Blue', 'color.black': 'Black', 'color.orange': 'Orange', 'color.pink': 'Pink', 'color.other': 'Other',
+    'hold.crimp': 'Crimp', 'hold.sloper': 'Sloper', 'hold.jug': 'Jug', 'hold.pinch': 'Pinch', 'hold.pocket': 'Pocket', 'hold.volume': 'Volume', 'hold.edge': 'Edge',
+    'angle.slab': 'Slab', 'angle.vertical': 'Vertical', 'angle.overhang': 'Overhang', 'angle.roof': 'Roof',
+    'style.dynamic': 'Dynamic', 'style.static': 'Static', 'style.compression': 'Compression', 'style.balance': 'Balance', 'style.power': 'Power',
+    'style.technical': 'Technical', 'style.coordination': 'Coordination', 'style.heel_hook': 'Heel hook', 'style.toe_hook': 'Toe hook', 'style.mantle': 'Mantle',
+  },
+};
+
+export const t = (key, vars = {}) =>
+  (dict[lang][key] ?? key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+
+const locale = lang === 'pt' ? 'pt-BR' : 'en';
+export const fmtDate = (iso, opts = { day: 'numeric', month: 'short' }) => new Intl.DateTimeFormat(locale, opts).format(new Date(iso));
+export const fmtPct = (n) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 0 }).format(n);
+export const fmtDuration = (ms) => {
+  const m = Math.max(0, Math.round(ms / 60000));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
+};
