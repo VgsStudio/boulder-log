@@ -797,6 +797,7 @@ function viewClimb(id) {
   const root = rootOf(c);
   const box = h('div', { class: 'stack' });
   let confirmDelete = false;
+  let editing = false; // cor e grau abertos para edição
   let photo = null; // { url }
 
   const patchClimb = (fields) => {
@@ -860,7 +861,17 @@ function viewClimb(id) {
 
     fill(box, 
       h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
-      h('h1', { class: 'row' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
+      h('div', { class: 'row title-row' },
+        h('h1', { class: 'row grow' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
+        h('button', { class: 'link', type: 'button', onclick: () => { editing = !editing; draw(); } }, editing ? t('climb.done') : t('climb.edit'))),
+      // Edição de cor e grau (num projeto, as tentativas seguintes usam a cor/grau da raiz).
+      editing && h('section', { class: 'card stack' },
+        h('div', {}, h('h2', {}, t('climb.color')),
+          h('div', { class: 'chips', role: 'group' }, COLORS.map((col) =>
+            h('button', { class: 'chip', type: 'button', 'aria-pressed': String(cur.color === col), onclick: () => patchClimb({ color: col }) }, swatch(col), colorName(col))))),
+        h('div', {}, h('h2', {}, t('climb.grade')),
+          h('div', { class: 'chips scroll', role: 'group' }, S.GRADES.map((g) =>
+            h('button', { class: 'chip grade', type: 'button', 'aria-pressed': String(cur.grade === g), onclick: () => patchClimb({ grade: g }) }, grade(g)))))),
 
       r.photoType && h('div', { class: 'stage' },
         photo?.url

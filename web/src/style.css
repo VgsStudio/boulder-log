@@ -417,3 +417,4 @@ body {
 }
 .overlay rect.cand { stroke: rgb(255 255 255 / .45); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .photo-pick .detect-status { margin: 0; }
+.title-row { align-items: center; } .title-row h1 { margin: 6px 0 12px; }
