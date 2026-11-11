@@ -82,6 +82,7 @@ const loadTokens = () => { try { return JSON.parse(localStorage.getItem(TOKENS))
 const saveTokens = (tk) => { try { localStorage.setItem(TOKENS, JSON.stringify({ ...tk, obtainedAt: Date.now() })); } catch {} };
 
 async function login(path = 'oauth2/authorize') {
+  try { if (location.hash.length > 2) sessionStorage.setItem('cm:after', location.hash); } catch {}
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   sessionStorage.setItem(VERIFIER, verifier);
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
@@ -890,7 +891,7 @@ function viewClimb(id) {
         h('p', { class: 'num' }, proj.sentAt
           ? t('climb.projectSent', { d: fmtDate(proj.sentAt, { day: 'numeric', month: 'long' }) })
           : proj.dropped ? t('project.droppedOn', { d: fmtDate(r.droppedAt ?? r.createdAt, { day: 'numeric', month: 'long' }) })
-            : t('climb.projectProgress', { s: sessionsText(proj.sessions) })),
+            : proj.sessions ? t('climb.projectProgress', { s: sessionsText(proj.sessions) }) : t('project.notYet')),
         // Projeto aberto: registrar a nova tentativa direto daqui, na sessão de hoje.
         !proj.sentAt && !proj.dropped && h('div', { class: 'row project-actions' },
           h('button', { class: 'btn go big grow', type: 'button', onclick: (e) => logTry(r, 'sent', e.currentTarget) }, t('project.sent')),
@@ -915,6 +916,7 @@ function viewClimb(id) {
           ]
           : h('button', { class: 'btn block', type: 'button', onclick: analyze }, t('ai.analyze'))),
 
+      h('button', { class: 'btn block', type: 'button', onclick: (e) => shareClimb(r, e.currentTarget) }, t('share.button')),
       h('button', { class: 'btn ghost danger block', type: 'button', onclick: del }, t('climb.delete')),
     );
   };
@@ -929,6 +931,59 @@ const capitalize = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 function debounce(fn, ms) {
   let tm;
   return (...a) => { clearTimeout(tm); tm = setTimeout(() => fn(...a), ms); };
+}
+
+// ---------- compartilhar ----------
+/** Gera o link e abre a folha com "Enviar" (compartilhamento nativo, chamado direto do toque,
+ *  como o iOS exige) e "Copiar link". */
+async function shareClimb(c, btn) {
+  btn.disabled = true;
+  try {
+    const { token } = await api(`/climbs/${c.id}/share`, { method: 'POST' });
+    const url = `${location.origin}/#/s/${token}`;
+    const text = t('share.text', { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
+    const copy = async () => {
+      try { await navigator.clipboard.writeText(url); toast(t('share.copied')); } catch { toast(url); }
+    };
+    openSheet(h('div', { class: 'stack' },
+      h('h2', {}, t('share.title')),
+      h('p', { class: 'muted' }, t('share.lead')),
+      h('input', { type: 'text', value: url, readonly: true, onfocus: (e) => e.target.select() }),
+      navigator.share && h('button', { class: 'btn primary big block', type: 'button', onclick: () => navigator.share({ title: 'Chalkmark', text, url }).catch(() => {}) }, t('share.send')),
+      h('button', { class: 'btn block', type: 'button', onclick: copy }, t('share.copy'))));
+  } catch (err) { fail(err); }
+  btn.disabled = false;
+}
+
+/** Boulder recebido por link: ver e adicionar aos próprios projetos. */
+function viewShare(token) {
+  const box = h('div', { class: 'stack' }, h('p', { class: 'small detect-status loading' }, t('share.loading')));
+  api(`/shares/${token}`).then((sh) => {
+    const add = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const climb = await api(`/shares/${token}/accept`, { method: 'POST' });
+        state.climbs.push(climb);
+        playTick();
+        toast(t('share.added'));
+        location.replace(`#/climb/${climb.id}`);
+      } catch (err) { fail(err); e.target.disabled = false; }
+    };
+    fill(box,
+      h('p', { class: 'muted small' }, t('share.received')),
+      h('h1', { class: 'row' }, swatch(sh.color), colorName(sh.color), h('span', { class: 'grade-pill' }, grade(sh.grade))),
+      sh.photoUrl && h('div', { class: 'stage' },
+        h('img', { src: sh.photoUrl, alt: '', decoding: 'async' }),
+        holdsOverlay(sh.holds),
+        sh.tap && h('span', { class: 'marker', style: { '--x': `${sh.tap.x * 100}%`, '--y': `${sh.tap.y * 100}%` } })),
+      sh.ai && h('div', { class: 'chips' },
+        sh.ai.wallAngle && h('span', { class: 'chip' }, t(`angle.${sh.ai.wallAngle}`)),
+        (sh.ai.holdTypes ?? []).map((x) => h('span', { class: 'chip' }, t(`hold.${x}`)))),
+      sh.mine
+        ? h('p', { class: 'muted' }, t('share.mine'))
+        : h('button', { class: 'btn go big block', type: 'button', onclick: add }, t('share.add')));
+  }, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('share.gone') : t('error.generic'))));
+  return box;
 }
 
 // ---------- tela: histórico (calendário + sessões + galeria) ----------
@@ -1088,7 +1143,7 @@ function viewProgress() {
 
 function climbRowProject(p) {
   const row = climbRow(p.root);
-  row.querySelector('.meta').textContent = t('climb.projectProgress', { s: sessionsText(p.sessions) });
+  row.querySelector('.meta').textContent = p.sessions ? t('climb.projectProgress', { s: sessionsText(p.sessions) }) : t('project.notYet');
   return row;
 }
 
@@ -1159,6 +1214,7 @@ const ROUTES = [
   [/^#\/new$/, viewNew, 'session'],
   [/^#\/climb\/([a-z0-9]{19})$/, viewClimb, null],
   [/^#\/history$/, viewHistory, 'history'],
+  [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
   [/^#\/progress$/, viewProgress, 'progress'],
 ];
 
@@ -1199,6 +1255,10 @@ async function boot() {
   $('#tabbar').hidden = false;
   $('#open-settings').hidden = false;
   window.addEventListener('hashchange', render);
+  try {
+    const after = sessionStorage.getItem('cm:after');
+    if (after) { sessionStorage.removeItem('cm:after'); history.replaceState({}, '', `/${after}`); }
+  } catch {}
   // URLs assinadas das miniaturas valem 1 h: recarrega ao voltar ao app depois de um tempo.
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && Date.now() - state.loadedAt > 45 * 60_000) {

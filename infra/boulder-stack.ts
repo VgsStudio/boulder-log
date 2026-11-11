@@ -179,6 +179,7 @@ export class BoulderStack extends Stack {
       ['/api/climbs/{id}', M.PATCH], ['/api/climbs/{id}', M.DELETE],
       ['/api/climbs/{id}/media', M.GET], ['/api/climbs/{id}/analyze', M.POST],
       ['/api/settings', M.GET], ['/api/settings', M.PUT],
+      ['/api/climbs/{id}/share', M.POST], ['/api/shares/{id}', M.GET], ['/api/shares/{id}/accept', M.POST],
     ];
     for (const [p, method] of routes) httpApi.addRoutes({ path: p, methods: [method], integration, authorizer });
 

@@ -84,7 +84,8 @@ export function projects(climbs) {
     return {
       root,
       attempts: tries.reduce((n, c) => n + c.attempts, 0),
-      sessions: new Set(tries.map((c) => c.sessionId)).size,
+      // Projeto recebido por compartilhamento começa sem sessão (ainda não tentado).
+      sessions: new Set(tries.map((c) => c.sessionId).filter(Boolean)).size,
       sentAt: sent?.createdAt ?? null,
       dropped: Boolean(root.dropped),
       lastAt: tries[tries.length - 1].createdAt,

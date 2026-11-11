@@ -1,7 +1,8 @@
 // API do Boulder Log. Toda rota passa pelo autorizador JWT do Cognito; o dono
 // dos dados é sempre o `sub` do token (pk = USER#sub), nunca algo do corpo.
 import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { randomBytes } from 'node:crypto';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { analyzePhoto, COLORS, sanitizeAi } from './ai.ts';
@@ -15,6 +16,9 @@ const PHOTO_TYPES = ['image/webp', 'image/jpeg'] as const;
 const MAX_FULL = 4 * 1024 * 1024;
 const MAX_THUMB = 400 * 1024;
 const MAX_GRADE = 17;
+// Compartilhamento: link com código aleatório (128 bits), válido por 90 dias.
+const SHARE_RE = /^[A-Za-z0-9_-]{22}$/;
+const SHARE_DAYS = 90;
 /** Versão do termo de uso das fotos (web/src/i18n.js, chaves terms.*). Mudou o texto → nova versão → novo aceite. */
 export const PHOTO_TERMS_VERSION = '2026-11-11';
 const URL_SECONDS = 3600;
@@ -154,6 +158,13 @@ async function withThumb(sub: string, c: Record<string, unknown>) {
   return c.photoType ? { ...p, thumbUrl: await signGet(photoKey(sub, p.id, 'thumb')) } : p;
 }
 
+async function getShare(token: string | undefined) {
+  if (!token || !SHARE_RE.test(token)) throw new HttpError(404, 'NOT_FOUND');
+  const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: `SHARE#${token}`, sk: 'SHARE' } }));
+  if (!Item || (Item.ttl as number) * 1000 < Date.now()) throw new HttpError(404, 'NOT_FOUND');
+  return Item;
+}
+
 // ---------- cota diária de IA (contador atômico) ----------
 async function takeAiQuota(pk: string) {
   const day = nowIso().slice(0, 10);
@@ -276,6 +287,53 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         Delete: { Objects: (['full', 'thumb'] as const).map((k) => ({ Key: photoKey(sub, cid, k) })), Quiet: true },
       }));
       return json(200, { ok: true });
+    }
+    // ---------- compartilhar um boulder ----------
+    case 'POST /api/climbs/{id}/share': {
+      const cid = id(pid, 'id');
+      const c = await getItem(pk, `CLIMB#${cid}`);
+      const token = randomBytes(16).toString('base64url');
+      // Fotografia do boulder no momento do compartilhamento; nada da conta de quem compartilha
+      // (e-mail, sessões, anotação) vai junto.
+      const share = {
+        pk: `SHARE#${token}`, sk: 'SHARE',
+        ownerSub: sub, climbId: cid,
+        color: c.color, grade: c.grade, holds: c.holds, tap: c.tap, ai: c.ai, photoType: c.photoType,
+        createdAt: nowIso(),
+        ttl: Math.floor(Date.now() / 1000) + SHARE_DAYS * 86400,
+      };
+      await ddb.send(new PutCommand({ TableName: TABLE, Item: share }));
+      log('share.created', { climbId: cid });
+      return json(201, { token });
+    }
+    case 'GET /api/shares/{id}': {
+      const sh = await getShare(pid);
+      const photoUrl = sh.photoType ? await signGet(photoKey(sh.ownerSub as string, sh.climbId as string, 'full')) : null;
+      const { color, grade, holds, tap, ai, createdAt } = sh;
+      return json(200, { color, grade, holds, tap, ai, createdAt, photoUrl, mine: sh.ownerSub === sub });
+    }
+    case 'POST /api/shares/{id}/accept': {
+      const sh = await getShare(pid);
+      const climbId = newId();
+      // Entra como projeto ainda não tentado (sem sessão); a foto é copiada para a conta de quem aceitou.
+      const item = {
+        pk, sk: `CLIMB#${climbId}`,
+        color: sh.color, grade: sh.grade, holds: sh.holds, tap: sh.tap, ai: sh.ai, photoType: sh.photoType,
+        result: 'project', attempts: 0, sharedFrom: pid, createdAt: nowIso(),
+      };
+      if (sh.photoType) {
+        for (const size of ['full', 'thumb'] as const) {
+          await s3.send(new CopyObjectCommand({
+            Bucket: PHOTO_BUCKET,
+            CopySource: `${PHOTO_BUCKET}/${photoKey(sh.ownerSub as string, sh.climbId as string, size)}`,
+            Key: photoKey(sub, climbId, size),
+            TaggingDirective: 'REPLACE', // não exige permissão de ler as tags da origem
+          })).catch((e) => { if (size === 'full') throw e; }); // sem miniatura: segue com a foto grande
+        }
+      }
+      await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
+      log('share.accepted', { share: String(pid).slice(0, 4) });
+      return json(201, await withThumb(sub, item));
     }
     case 'GET /api/climbs/{id}/media': {
       const cid = id(pid, 'id');
