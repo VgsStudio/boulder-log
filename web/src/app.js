@@ -682,9 +682,14 @@ function viewNew() {
           : h('label', { class: 'photo-pick' },
             h('div', {}, svgCamera(), t('climb.photo')), fileInput()),
 
+      // Cor: o toque escolhe sozinho; a lista só aparece sem toque ou se pedir para trocar.
       h('section', {}, h('h2', {}, t('climb.color')),
-        h('div', { class: 'chips', role: 'group' }, COLORS.map((c) =>
-          h('button', { class: 'chip', type: 'button', 'aria-pressed': String(d.color === c), onclick: () => { setColor(c); draw(); } }, swatch(c), colorName(c))))),
+        d.color && d.tap && !d.pickColor
+          ? h('div', { class: 'color-auto' }, swatch(d.color), h('strong', {}, colorName(d.color)),
+            h('span', { class: 'muted small grow' }, t('climb.colorAuto')),
+            h('button', { class: 'link', type: 'button', onclick: () => { d.pickColor = true; draw(); } }, t('climb.change')))
+          : h('div', { class: 'chips', role: 'group' }, COLORS.map((c) =>
+            h('button', { class: 'chip', type: 'button', 'aria-pressed': String(d.color === c), onclick: () => { setColor(c); d.pickColor = false; draw(); } }, swatch(c), colorName(c))))),
 
       h('section', {}, h('h2', {}, t('climb.grade')),
         h('div', { class: 'chips scroll', role: 'group' }, S.GRADES.map((g) =>
