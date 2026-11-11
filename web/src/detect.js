@@ -126,7 +126,7 @@ export function routeHolds(boxes, seed, width, height, maxGap = 0.18, tolerance 
   // senão branca e cinza viram a mesma via.
   const neutral = seed.lab && Math.hypot(seed.lab[1], seed.lab[2]) < 12;
   const near = (a, c) => (neutral
-    ? Math.hypot((a[0] - c[0]) / 1.2, a[1] - c[1], a[2] - c[2]) <= 13
+    ? Math.hypot((a[0] - c[0]) / 1.6, a[1] - c[1], a[2] - c[2]) <= 15
     : colorDistance(a, c) <= tolerance);
   const similar = (b) => (b.lab && seed.lab ? near(b.lab, seed.lab) : b.color === seed.color);
   // Caixas minúsculas (adesivos, etiquetas de grau, parafusos) não entram sozinhas na via.
