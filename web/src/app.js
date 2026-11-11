@@ -3,7 +3,8 @@ import './style.css';
 import { fmtDate, fmtDuration, fmtPct, lang, t } from './i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
 // detect.js é leve; o onnxruntime-web e o modelo (~10 MB) só baixam na primeira foto.
-import { detectHolds, holdAt, routeHolds } from './detect.js';
+import { detectHolds, growRegion, holdAt, routeHolds } from './detect.js';
+import { playFanfare, playSent, playTick, setSound, soundOn } from './sound.js';
 
 const PHOTO_TERMS_VERSION = '2026-11-11'; // igual a services/api.ts
 import * as S from './stats.js';
@@ -345,8 +346,9 @@ function gradePathCard() {
 }
 
 /** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. */
-function celebrate({ unlocked, xp, levelUp }) {
-  if (!unlocked.length && !levelUp) { toast(t('xp.gain', { n: xp })); return; }
+function celebrate({ unlocked, xp, levelUp, sent = false }) {
+  if (!unlocked.length && !levelUp) { (sent ? playSent : playTick)(); toast(t('xp.gain', { n: xp })); return; }
+  playFanfare();
   const pr = unlocked.filter((a) => a.id.startsWith('grade:')).map((a) => Number(a.id.split(':')[1])).sort((a, b) => b - a)[0];
   const best = Math.max(...state.climbs.filter(S.isSend).map((c) => c.grade));
   const isPr = pr != null && pr >= best;
@@ -363,6 +365,7 @@ function celebrate({ unlocked, xp, levelUp }) {
 }
 
 function recapSheet(s, unlocked) {
+  playFanfare();
   const cs = state.climbs.filter((c) => c.sessionId === s.id);
   const sum = S.sessionSummaries([s], state.climbs)[0];
   const flashes = cs.filter((c) => c.result === 'flash').length;
@@ -500,12 +503,15 @@ function endSessionSheet(s) {
     e.currentTarget.disabled = true;
     try {
       const body = { end: true, feeling, ...(note.value.trim() ? { note: note.value.trim() } : {}) };
-      upsert(state.sessions, await api(`/sessions/${s.id}`, { method: 'PATCH', body }));
+      const prev = { ...s };
+      upsert(state.sessions, { id: s.id, endedAt: new Date().toISOString(), feeling, ...(body.note ? { note: body.note } : {}) });
       $('#sheet').close();
       render();
       const ended = state.sessions.find((x) => x.id === s.id);
       // Conquistas desta sessão: as que caíram desde o início dela.
       recapSheet(ended, S.achievements(state.sessions, state.climbs).filter((a) => a.at >= ended.startedAt));
+      api(`/sessions/${s.id}`, { method: 'PATCH', body })
+        .then((x) => upsert(state.sessions, x), (err) => { upsert(state.sessions, { ...prev, endedAt: undefined }); render(); fail(err); });
     } catch (err) { fail(err); e.target.disabled = false; }
   };
   const feelSeg = () => seg([1, 2, 3, 4, 5].map((n) => [n, String(n)]), feeling, (v) => { feeling = v; feelBox.replaceChildren(feelSeg()); });
@@ -599,7 +605,7 @@ function viewNew() {
   const applyTap = (x, y) => {
     const c = d.canvas;
     d.tap = { x: +x.toFixed(4), y: +y.toFixed(4) };
-    d.seed = d.boxes && holdAt(d.boxes, x, y);
+    d.seed = d.boxes && findHold(x, y);
     if (d.seed) {
       d.lab = boxLab(d.rgba, c.width, c.height, d.seed);
     } else {
@@ -617,10 +623,20 @@ function viewNew() {
       d.route = routeHolds(d.boxes, d.seed, d.canvas.width, d.canvas.height);
     }
   };
+  /** Agarra no ponto: a detectada mais próxima; senão cresce a região pela cor (volume ou agarra
+   *  que o detector não viu) e passa a tratá-la como agarra detectada. */
+  const findHold = (x, y) => {
+    const c = d.canvas;
+    const found = holdAt(d.boxes, x, y, 0.03, c.width / c.height);
+    if (found) return found;
+    const grown = growRegion(d.rgba, c.width, c.height, x, y);
+    if (grown) d.boxes.push(grown);
+    return grown ?? undefined;
+  };
   const onTap = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-    const hit = d.route && d.boxes && holdAt(d.boxes, x, y);
+    const hit = d.route && d.boxes && findHold(x, y);
     if (hit && hit !== d.seed) {
       // Ajuste manual: toque numa agarra inclui ou tira ela da via.
       d.route = d.route.includes(hit) ? d.route.filter((b) => b !== hit) : [...d.route, hit];
@@ -664,22 +680,21 @@ function viewNew() {
       const before = S.achievements(state.sessions, state.climbs);
       const lvBefore = S.level(S.totalXp(state.climbs)).level;
       const { climb, uploads } = await api('/climbs', { method: 'POST', body });
-      if (uploads) {
-        await Promise.all([upload(uploads.full, full), upload(uploads.thumb, thumb)]);
-        climb.thumbUrl = URL.createObjectURL(thumb);
-      }
+      if (uploads) climb.thumbUrl = URL.createObjectURL(thumb); // mostra a foto local já
       state.climbs.push(climb);
-      // Estilo da via (tipo de agarra, parede, estilo) em segundo plano; falha não atrapalha o registro.
-      if (uploads) {
-        api(`/climbs/${climb.id}/analyze`, { method: 'POST' }).then((x) => {
-          upsert(state.climbs, x);
-          if (location.hash === `#/climb/${climb.id}`) render();
-        }, (err) => console.warn('analyze', err));
-      }
       const unlocked = S.newAchievements(before, S.achievements(state.sessions, state.climbs));
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
-      setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0 }), 50);
+      setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: S.isSend(climb) }), 50);
       location.replace(`#/climb/${climb.id}`); // sem voltar para o formulário
+      // A foto sobe em segundo plano; depois dela, o estilo da via (IA). Nada disso segura a tela.
+      if (uploads) {
+        Promise.all([upload(uploads.full, full), upload(uploads.thumb, thumb)])
+          .then(() => api(`/climbs/${climb.id}/analyze`, { method: 'POST' }).then((x) => {
+            upsert(state.climbs, x);
+            if (location.hash === `#/climb/${climb.id}`) render();
+          }, (err) => console.warn('analyze', err)))
+          .catch(() => toast(t('upload.failed')));
+      }
     } catch (err) {
       fail(err);
       btn.disabled = false;
@@ -784,8 +799,13 @@ function viewClimb(id) {
   let confirmDelete = false;
   let photo = null; // { url }
 
-  const patchClimb = async (fields) => {
-    try { upsert(state.climbs, await api(`/climbs/${c.id}`, { method: 'PATCH', body: fields })); draw(); } catch (err) { fail(err); }
+  const patchClimb = (fields) => {
+    const prev = { ...climbOf(c.id) };
+    upsert(state.climbs, { id: c.id, ...fields });
+    if (fields.result && S.isSend({ result: fields.result }) && !S.isSend(prev)) playSent();
+    draw();
+    api(`/climbs/${c.id}`, { method: 'PATCH', body: fields })
+      .then((x) => upsert(state.climbs, x), (err) => { upsert(state.climbs, prev); draw(); fail(err); });
   };
   const analyze = async (e) => {
     e.currentTarget.disabled = true;
@@ -800,18 +820,24 @@ function viewClimb(id) {
     const s = activeSession();
     if (!s) { toast(t('project.needSession')); return; }
     btn.disabled = true;
+    const body = { sessionId: s.id, color: rootClimb.color, grade: rootClimb.grade, attempts: 1, result, projectId: rootClimb.id };
+    const before = S.achievements(state.sessions, state.climbs);
+    const lvBefore = S.level(S.totalXp(state.climbs)).level;
+    // Registro provisório para a tela reagir já; troca pelo do servidor quando ele responder.
+    const temp = { ...body, id: `tmp${Date.now()}`, createdAt: new Date().toISOString() };
+    state.climbs.push(temp);
+    const lvAfter = S.level(S.totalXp(state.climbs)).level;
+    celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(temp), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: result === 'sent' });
+    draw();
     try {
-      const before = S.achievements(state.sessions, state.climbs);
-      const lvBefore = S.level(S.totalXp(state.climbs)).level;
-      const { climb } = await api('/climbs', {
-        method: 'POST',
-        body: { sessionId: s.id, color: rootClimb.color, grade: rootClimb.grade, attempts: 1, result, projectId: rootClimb.id },
-      });
-      state.climbs.push(climb);
-      const lvAfter = S.level(S.totalXp(state.climbs)).level;
-      celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0 });
+      const { climb } = await api('/climbs', { method: 'POST', body });
+      state.climbs = state.climbs.map((x) => (x === temp ? climb : x));
       draw();
-    } catch (err) { fail(err); btn.disabled = false; }
+    } catch (err) {
+      state.climbs = state.climbs.filter((x) => x !== temp);
+      draw();
+      fail(err);
+    }
   };
   const del = async (e) => {
     if (!confirmDelete) { confirmDelete = true; e.currentTarget.textContent = t('climb.confirmDelete'); return; }
@@ -1085,6 +1111,8 @@ function settingsSheet() {
     h('h2', {}, t('settings.title')),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.scale')),
       seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; draw(); })),
+    h('div', {}, h('div', { class: 'small muted' }, t('settings.sound')),
+      seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') playSent(); draw(); })),
     h('h2', {}, t('settings.goals')),
     h('div', { class: 'row' }, h('span', { class: 'grow' }, t('settings.weekly')),
       stepper(st.weeklySessions, 0, 7, (n) => (st.weeklySessions = n), t('settings.weekly'))),

@@ -2,7 +2,7 @@
 // Modelo: jwlarocque/yolov8n-freeclimbs-detect-2 (Hugging Face, AGPL-3.0). Carrega só
 // quando o usuário tira a primeira foto; depois fica no cache do navegador.
 // A cor de cada agarra vem do color.js (mesmo método do toque).
-import { boxLab, colorDistance, suggest } from './color.js';
+import { boxLab, colorDistance, rgbToLab, sampleLab, suggest } from './color.js';
 
 const SIZE = 2560; // entrada fixa do modelo exportado
 const CONF = 0.3; // abaixo disso aparecem pedaços de parede lisa como "agarra"
@@ -139,9 +139,57 @@ export function routeHolds(boxes, seed, width, height, maxGap = 0.18, tolerance 
   return route;
 }
 
-/** Caixa que contém o ponto tocado (a menor, se houver sobreposição). */
-export function holdAt(boxes, x, y) {
-  return boxes
+/** Agarra que o detector não viu (volume grande, agarra rente): cresce a região pela cor a
+ *  partir do toque, como um balde de tinta, numa grade reduzida. Devolve a caixa ou null.
+ *  ponytail: crescimento simples por cor; parede da mesma cor da agarra vaza até o limite de área. */
+export function growRegion(rgba, W, H, x, y, { tolerance = 12, maxArea = 0.2 } = {}) {
+  const step = Math.max(1, Math.round(Math.max(W, H) / 360));
+  const gw = Math.ceil(W / step), gh = Math.ceil(H / step);
+  const labs = new Map();
+  const lab = (gx, gy) => {
+    const k = gy * gw + gx;
+    if (!labs.has(k)) {
+      const i = (Math.min(H - 1, gy * step) * W + Math.min(W - 1, gx * step)) * 4;
+      labs.set(k, rgbToLab([rgba[i], rgba[i + 1], rgba[i + 2]]));
+    }
+    return labs.get(k);
+  };
+  const sx = Math.min(gw - 1, Math.round(x * W / step)), sy = Math.min(gh - 1, Math.round(y * H / step));
+  // Cor de referência: mediana do miolo em volta do toque (com o desconto de magnésio do sampleLab).
+  const around = [];
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const i = (Math.min(H - 1, Math.max(0, (sy + dy) * step)) * W + Math.min(W - 1, Math.max(0, (sx + dx) * step))) * 4;
+    around.push(rgba[i], rgba[i + 1], rgba[i + 2], 255);
+  }
+  const ref = sampleLab(around);
+  const seen = new Uint8Array(gw * gh);
+  const queue = [[sx, sy]];
+  seen[sy * gw + sx] = 1;
+  let x0 = sx, x1 = sx, y0 = sy, y1 = sy, n = 0;
+  const limit = maxArea * gw * gh;
+  while (queue.length) {
+    const [cx, cy] = queue.pop();
+    if (++n > limit) return null; // vazou para a parede
+    x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+    for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+      if (nx < 0 || ny < 0 || nx >= gw || ny >= gh || seen[ny * gw + nx]) continue;
+      seen[ny * gw + nx] = 1;
+      if (colorDistance(lab(nx, ny), ref) <= tolerance) queue.push([nx, ny]);
+    }
+  }
+  if (n < 6) return null; // só um ponto: provavelmente parede ou sombra
+  return { x: (x0 * step) / W, y: (y0 * step) / H, w: ((x1 - x0 + 1) * step) / W, h: ((y1 - y0 + 1) * step) / H, conf: 0, lab: ref, grown: true };
+}
+
+/** Caixa no ponto tocado: a menor que contém o ponto; senão a mais próxima até `margin`
+ *  (fração do lado maior), porque o dedo raramente cai exatamente dentro da caixa. */
+export function holdAt(boxes, x, y, margin = 0.03, aspect = 1) {
+  const inside = boxes
     .filter((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h)
     .sort((a, b) => a.w * a.h - b.w * b.h)[0];
+  if (inside) return inside;
+  const gap = (b) => Math.hypot(Math.max(0, b.x - x, x - b.x - b.w) * aspect, Math.max(0, b.y - y, y - b.y - b.h));
+  const nearest = boxes.map((b) => [b, gap(b)]).sort((a, b) => a[1] - b[1])[0];
+  return nearest && nearest[1] <= margin ? nearest[0] : undefined;
 }
+

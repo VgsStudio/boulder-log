@@ -75,7 +75,7 @@ export class BoulderStack extends Stack {
       depsLockFilePath: path.join(ROOT, 'package-lock.json'),
       runtime: lambda.Runtime.NODEJS_22_X,
       architecture: lambda.Architecture.ARM_64,
-      memorySize: 512,
+      memorySize: 1024, // mais CPU: respostas e cold start mais rápidos (custo continua irrisório)
       timeout: Duration.seconds(29), // limite do HTTP API; a análise de IA leva poucos segundos
       environment: {
         TABLE_NAME: table.tableName,

@@ -21,3 +21,19 @@ test('via: mesma cor medida, encadeada pela proximidade', () => {
   assert.deepEqual(route.map((b) => boxes.indexOf(b)).sort(), [0, 1, 2]);
   assert.equal(holdAt(boxes, 0.415, 0.815), seed);
 });
+
+test('toque perto da caixa conta; região cresce onde o detector não viu nada', async () => {
+  const { growRegion } = await import('../web/src/detect.js');
+  const b = box(0.4, 0.4, [200, 40, 40], 'red');
+  assert.equal(holdAt([b], 0.455, 0.42), b); // 1,5% fora da caixa
+  assert.equal(holdAt([b], 0.6, 0.6), undefined);
+  // Imagem 100x100 cinza com um "volume" vermelho de 30x20 em (50,40).
+  const W = 100, H = 100, rgba = new Uint8ClampedArray(W * H * 4);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, red = x >= 50 && x < 80 && y >= 40 && y < 60;
+    rgba.set(red ? [190, 45, 40, 255] : [120, 120, 120, 255], i);
+  }
+  const g = growRegion(rgba, W, H, 0.6, 0.5);
+  assert.ok(g && Math.abs(g.x - 0.5) < 0.02 && Math.abs(g.w - 0.3) < 0.03 && Math.abs(g.h - 0.2) < 0.03, JSON.stringify(g));
+  assert.equal(growRegion(rgba, W, H, 0.1, 0.1), null); // parede: vaza → null
+});
