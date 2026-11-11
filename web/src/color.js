@@ -54,8 +54,41 @@ export function sampleLab(rgba) {
     px.forEach((v, c) => keep[c].push(v));
   }
   // Agarra preta ou branca pura: se o filtro tirou quase tudo, usa todos os pixels.
-  const src = keep[0].length >= all[0].length / 4 ? keep : all;
+  let src = keep[0].length >= all[0].length / 4 ? keep : all;
+  // Magnésio deixa a agarra acinzentada: se ao menos 20% dos pixels têm cor de verdade
+  // (saturação), a mediana sai só deles. Agarra branca/preta não tem esses 20% e segue igual.
+  const vivid = [[], [], []];
+  for (let i = 0; i < src[0].length; i++) {
+    const r = src[0][i], g = src[1][i], b = src[2][i];
+    if (Math.max(r, g, b) - Math.min(r, g, b) >= 35) { vivid[0].push(r); vivid[1].push(g); vivid[2].push(b); }
+  }
+  if (vivid[0].length >= src[0].length * 0.2) src = vivid;
   return rgbToLab(src.map(median));
+}
+
+/** Cor da agarra dentro de uma caixa da imagem inteira (RGBA, largura W): desconta a parede.
+ *  A cor da parede é a mediana de um anel em volta da caixa; da agarra contam só os pixels
+ *  que diferem dela. Caixa = {x, y, w, h} normalizados 0-1. */
+export function boxLab(rgba, W, H, b) {
+  const x0 = Math.max(0, Math.floor(b.x * W)), y0 = Math.max(0, Math.floor(b.y * H));
+  const x1 = Math.min(W, Math.ceil((b.x + b.w) * W)), y1 = Math.min(H, Math.ceil((b.y + b.h) * H));
+  const pad = Math.max(3, Math.round(Math.min(x1 - x0, y1 - y0) * 0.25));
+  const step = Math.max(1, Math.round(Math.max(x1 - x0, y1 - y0) / 60)); // ~60x60 amostras no máximo
+  const inner = [], ring = [];
+  for (let y = Math.max(0, y0 - pad); y < Math.min(H, y1 + pad); y += step) {
+    for (let x = Math.max(0, x0 - pad); x < Math.min(W, x1 + pad); x += step) {
+      const i = (y * W + x) * 4;
+      (x >= x0 && x < x1 && y >= y0 && y < y1 ? inner : ring).push(rgba[i], rgba[i + 1], rgba[i + 2], 255);
+    }
+  }
+  if (!ring.length) return sampleLab(inner);
+  const wall = sampleLab(ring);
+  const hold = [];
+  for (let i = 0; i < inner.length; i += 4) {
+    const lab = rgbToLab([inner[i], inner[i + 1], inner[i + 2]]);
+    if (Math.hypot(lab[0] - wall[0], lab[1] - wall[1], lab[2] - wall[2]) > 18) hold.push(inner[i], inner[i + 1], inner[i + 2], 255);
+  }
+  return sampleLab(hold.length >= inner.length * 0.15 ? hold : inner);
 }
 
 // Distância em LCh: a luz do ginásio muda muito a luminosidade (L) e a saturação (C),

@@ -25,6 +25,11 @@ test('mediana ignora magnésio e sombra em volta', () => {
   assert.equal(color([46, 158, 79], [...chalk, ...shade]), 'green');
 });
 
+test('azul coberta de magnésio continua azul', () => {
+  const chalk = Array(330).fill([205, 208, 212]); // mais da metade da agarra acinzentada
+  assert.equal(color([47, 111, 208], chalk), 'blue');
+});
+
 test('branca com magnésio continua branca', () => {
   assert.equal(color([238, 238, 232], Array(300).fill([255, 255, 255])), 'white');
 });

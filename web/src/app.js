@@ -1,7 +1,11 @@
 // Boulder Log: SPA sem framework. Rotas por hash, dados em memória, API em /api.
 import './style.css';
 import { fmtDate, fmtDuration, fmtPct, lang, t } from './i18n.js';
-import { calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
+import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
+// detect.js é leve; o onnxruntime-web e o modelo (~10 MB) só baixam na primeira foto.
+import { detectHolds, holdAt, routeHolds } from './detect.js';
+
+const PHOTO_TERMS_VERSION = '2026-11-11'; // igual a services/api.ts
 import * as S from './stats.js';
 
 const HOLD_TYPES = ['crimp', 'sloper', 'jug', 'pinch', 'pocket', 'volume', 'edge'];
@@ -492,13 +496,45 @@ function openSheet(content) {
   d.showModal();
 }
 
+// ---------- termo de uso das fotos ----------
+function termsBody() {
+  return h('ul', { class: 'terms' }, ['private', 'rights', 'people', 'training', 'delete', 'remove'].map((k) => h('li', {}, t(`terms.${k}`))));
+}
+
+/** Pede o aceite do termo antes da primeira foto. Resolve true se aceito (agora ou antes). */
+function ensurePhotoTerms() {
+  if (state.settings.photoTermsVersion === PHOTO_TERMS_VERSION) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let accepted = false;
+    const btn = h('button', { class: 'btn primary big block', type: 'button', disabled: true }, t('terms.accept'));
+    const check = h('input', { type: 'checkbox', onchange: (e) => (btn.disabled = !e.target.checked) });
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        state.settings = { ...state.settings, ...(await api('/settings', { method: 'PUT', body: { acceptPhotoTerms: PHOTO_TERMS_VERSION } })) };
+        accepted = true;
+        $('#sheet').close();
+      } catch (err) { fail(err); btn.disabled = false; }
+    });
+    openSheet(h('div', { class: 'stack' },
+      h('h2', {}, t('terms.title')),
+      h('p', { class: 'muted' }, t('terms.lead')),
+      termsBody(),
+      h('label', { class: 'check' }, check, h('span', {}, t('terms.check'))),
+      btn));
+    $('#sheet').addEventListener('close', () => resolve(accepted), { once: true });
+  });
+}
+
 // ---------- tela: novo boulder ----------
 function viewNew() {
   const s = activeSession();
   if (!s) { location.hash = '#/'; return h('div'); }
   const gym = gymOf(s.gymId);
   const lastGrade = [...state.climbs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.grade ?? 3;
-  const d = { color: null, grade: lastGrade, attempts: 1, result: 'sent', note: '', tap: null, projectId: null, canvas: null, lab: null, suggestion: null };
+  const d = { color: null, grade: lastGrade, attempts: 1, result: 'sent', note: '', tap: null, projectId: null, canvas: null, lab: null, suggestion: null,
+    boxes: null, rgba: null, seed: null, route: null, detect: null };
+  const palette = gym?.palette ?? {};
   const openProjects = S.projects(state.climbs).filter((p) => !p.sentAt);
 
   const root = h('div', { class: 'stack' });
@@ -506,26 +542,53 @@ function viewNew() {
 
   const pickPhoto = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = '';
+    if (!file || !(await ensurePhotoTerms())) return;
     try {
-      d.canvas = await toCanvas(file, 1568);
-      d.tap = null; d.lab = null; d.suggestion = null;
+      const canvas = await toCanvas(file, 1568);
+      Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading' });
+      d.rgba = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data;
       draw();
+      // Detecta as agarras em segundo plano enquanto você preenche o resto.
+      detectHolds(canvas, palette).then((boxes) => {
+        if (d.canvas !== canvas) return;
+        Object.assign(d, { boxes, detect: 'done' });
+        if (d.tap) applyTap(d.tap.x, d.tap.y);
+        draw();
+      }, (err) => {
+        console.error(err);
+        if (d.canvas === canvas) { d.detect = 'failed'; draw(); }
+      });
     } catch (err) { fail(err); }
   };
   const fileInput = () => h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true, onchange: pickPhoto });
 
+  /** Toque: com o detector pronto, a cor vem da agarra inteira (descontando a parede) e a via é
+   *  o grupo de agarras dessa cor encadeadas a partir dela; sem detector, mede só em volta do toque. */
+  const applyTap = (x, y) => {
+    const c = d.canvas;
+    d.tap = { x: +x.toFixed(4), y: +y.toFixed(4) };
+    d.seed = d.boxes && holdAt(d.boxes, x, y);
+    if (d.seed) {
+      d.lab = boxLab(d.rgba, c.width, c.height, d.seed);
+    } else {
+      const half = Math.max(8, Math.round(c.width / 64)), px = Math.round(x * c.width), py = Math.round(y * c.height);
+      d.lab = sampleLab(c.getContext('2d', { willReadFrequently: true }).getImageData(Math.max(0, px - half), Math.max(0, py - half), half * 2 + 1, half * 2 + 1).data);
+    }
+    d.suggestion = suggest(d.lab, palette);
+    setColor(d.suggestion.best);
+  };
+  /** Muda a cor da via (toque ou chip) e refaz o grupo de agarras. */
+  const setColor = (color) => {
+    d.color = color;
+    if (d.seed) {
+      d.seed.color = color;
+      d.route = routeHolds(d.boxes, d.seed, d.canvas.width, d.canvas.height);
+    }
+  };
   const onTap = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-    const c = d.canvas, half = Math.max(8, Math.round(c.width / 64));
-    const px = Math.round(x * c.width), py = Math.round(y * c.height);
-    const box = c.getContext('2d', { willReadFrequently: true })
-      .getImageData(Math.max(0, px - half), Math.max(0, py - half), half * 2 + 1, half * 2 + 1);
-    d.tap = { x: +x.toFixed(4), y: +y.toFixed(4) };
-    d.lab = sampleLab(box.data);
-    d.suggestion = suggest(d.lab, gym?.palette ?? {});
-    d.color = d.suggestion.best;
+    applyTap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
     draw();
   };
 
@@ -555,6 +618,7 @@ function viewNew() {
         sessionId: s.id, color: d.color, grade: d.grade, attempts: d.attempts, result: d.result,
         ...(d.note.trim() ? { note: d.note.trim() } : {}),
         ...(d.tap ? { tap: d.tap } : {}),
+        ...(d.route?.length ? { holds: d.route.slice(0, 80).map(({ x, y, w, h: hh }) => ({ x, y, w, h: hh })) } : {}),
         ...(d.projectId ? { projectId: d.projectId } : {}),
         ...(full ? { photoType: full.type } : {}),
       };
@@ -601,7 +665,13 @@ function viewNew() {
         : d.canvas
           ? h('section', {},
             h('div', { class: 'stage', onclick: onTap }, d.canvas,
+              holdsOverlay(d.route),
               d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })),
+            h('p', { class: `small detect-status ${d.detect ?? ''}` },
+              d.detect === 'loading' ? t('detect.loading')
+                : d.detect === 'failed' ? t('detect.failed')
+                  : d.route ? t('detect.route', { n: d.route.length })
+                    : d.boxes ? t('detect.found', { n: d.boxes.length }) : ''),
             d.suggestion
               ? h('div', { class: 'suggestion small' },
                 h('strong', {}, t('climb.suggest', { c: colorName(d.suggestion.best).toLowerCase() })),
@@ -614,7 +684,7 @@ function viewNew() {
 
       h('section', {}, h('h2', {}, t('climb.color')),
         h('div', { class: 'chips', role: 'group' }, COLORS.map((c) =>
-          h('button', { class: 'chip', type: 'button', 'aria-pressed': String(d.color === c), onclick: () => { d.color = c; draw(); } }, swatch(c), colorName(c))))),
+          h('button', { class: 'chip', type: 'button', 'aria-pressed': String(d.color === c), onclick: () => { setColor(c); draw(); } }, swatch(c), colorName(c))))),
 
       h('section', {}, h('h2', {}, t('climb.grade')),
         h('div', { class: 'chips scroll', role: 'group' }, S.GRADES.map((g) =>
@@ -637,6 +707,16 @@ function viewNew() {
   // Grau atual visível na faixa rolável.
   requestAnimationFrame(() => root.querySelector('.chip.grade[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
   return root;
+}
+
+/** Caixas das agarras da via sobre a foto (coordenadas 0-1). */
+function holdsOverlay(holds) {
+  if (!holds?.length) return null;
+  return svg('svg', { class: 'overlay', viewBox: '0 0 1 1', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+    holds.flatMap((b) => [
+      svg('rect', { class: 'under', x: b.x, y: b.y, width: b.w, height: b.h }),
+      svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h }),
+    ]));
 }
 
 const svgCamera = () => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' },
@@ -689,11 +769,7 @@ function viewClimb(id) {
         photo?.url
           ? h('img', { src: photo.url, alt: '', decoding: 'async' })
           : r.thumbUrl && h('img', { src: r.thumbUrl, alt: '' }),
-        ai?.holds?.length > 0 && svg('svg', { class: 'overlay', viewBox: '0 0 1 1', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
-          ai.holds.flatMap((b) => [
-            svg('rect', { class: 'under', x: b.x, y: b.y, width: b.w, height: b.h, rx: 0.01 }),
-            svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 0.01 }),
-          ])),
+        holdsOverlay(r.holds),
         r.tap && h('span', { class: 'marker', style: { '--x': `${r.tap.x * 100}%`, '--y': `${r.tap.y * 100}%` } })),
 
       h('section', { class: 'card stack' },
@@ -951,6 +1027,9 @@ function settingsSheet() {
           } catch (err) { fail(err); e.target.disabled = false; }
         },
       }, t('settings.save'))),
+    h('button', { class: 'link', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
+      state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
+      h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
     h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
   );
   draw();

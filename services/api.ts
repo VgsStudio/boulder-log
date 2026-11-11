@@ -15,6 +15,8 @@ const PHOTO_TYPES = ['image/webp', 'image/jpeg'] as const;
 const MAX_FULL = 4 * 1024 * 1024;
 const MAX_THUMB = 400 * 1024;
 const MAX_GRADE = 17;
+/** Versão do termo de uso das fotos (web/src/i18n.js, chaves terms.*). Mudou o texto → nova versão → novo aceite. */
+export const PHOTO_TERMS_VERSION = '2026-11-11';
 const URL_SECONDS = 3600;
 
 // ---------- validação (fronteira de confiança: só passa o que está na lista) ----------
@@ -40,6 +42,7 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
     out.tap = { x: unit(t.x, 'tap'), y: unit(t.y, 'tap') };
   }
   if (has('projectId')) out.projectId = id(b.projectId, 'projectId');
+  if (has('holds')) out.holds = cleanHolds(b.holds);
   if (partial && has('ai')) {
     // Correções manuais do resultado da IA: mesmo saneamento da saída do modelo.
     const a = b.ai as Record<string, unknown>;
@@ -47,6 +50,17 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
     out.ai = sanitizeAi(a);
   }
   return out;
+}
+
+/** Agarras da via vindas do detector no navegador: caixas normalizadas 0-1, no máximo 80. */
+export function cleanHolds(v: unknown) {
+  if (!Array.isArray(v) || v.length > 80) bad('holds');
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  return (v as Record<string, unknown>[]).map((b) => {
+    const [x, y, w, h] = [b?.x, b?.y, b?.w, b?.h].map((n) => unit(n, 'holds'));
+    if (w === 0 || h === 0) bad('holds');
+    return { x: r3(x), y: r3(y), w: r3(w), h: r3(h) };
+  });
 }
 
 /** Localização do ginásio (para reconhecer o ginásio na próxima sessão). ~10 m de precisão. */
@@ -164,16 +178,30 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       return json(200, Item ? pub(Item) : {});
     }
     case 'PUT /api/settings': {
+      // Atualiza só o que veio (escala, metas, aceite do termo de fotos).
       const b = body();
-      const item = {
-        pk, sk: 'SETTINGS',
-        scale: oneOf(['v', 'font'] as const, b.scale ?? 'v', 'scale'),
-        // Metas: sessões por semana (0 = sem meta) e grau que quer mandar.
-        weeklySessions: int(b.weeklySessions ?? 0, 0, 14, 'weeklySessions'),
-        gradeGoal: b.gradeGoal == null ? null : int(b.gradeGoal, 0, MAX_GRADE, 'gradeGoal'),
-      };
-      await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
-      return json(200, pub(item));
+      const f: Record<string, unknown> = {};
+      if (b.scale !== undefined) f.scale = oneOf(['v', 'font'] as const, b.scale, 'scale');
+      // Metas: sessões por semana (0 = sem meta) e grau que quer mandar.
+      if (b.weeklySessions !== undefined) f.weeklySessions = int(b.weeklySessions, 0, 14, 'weeklySessions');
+      if (b.gradeGoal !== undefined) f.gradeGoal = b.gradeGoal === null ? null : int(b.gradeGoal, 0, MAX_GRADE, 'gradeGoal');
+      // Aceite do termo: só a versão vigente; data e hora vêm do servidor (registro do consentimento).
+      if (b.acceptPhotoTerms !== undefined) {
+        if (b.acceptPhotoTerms !== PHOTO_TERMS_VERSION) bad('acceptPhotoTerms');
+        f.photoTermsVersion = PHOTO_TERMS_VERSION;
+        f.photoTermsAt = nowIso();
+      }
+      const keys = Object.keys(f);
+      if (!keys.length) throw new HttpError(400, 'EMPTY_PATCH');
+      const { Attributes } = await ddb.send(new UpdateCommand({
+        TableName: TABLE,
+        Key: { pk, sk: 'SETTINGS' },
+        UpdateExpression: 'SET ' + keys.map((k, i) => `#k${i} = :v${i}`).join(', '),
+        ExpressionAttributeNames: Object.fromEntries(keys.map((k, i) => [`#k${i}`, k])),
+        ExpressionAttributeValues: Object.fromEntries(keys.map((k, i) => [`:v${i}`, f[k]])),
+        ReturnValues: 'ALL_NEW',
+      }));
+      return json(200, pub(Attributes!));
     }
     case 'GET /api/gyms':
       return json(200, (await queryAll(pk, 'GYM#')).map(pub));
@@ -220,6 +248,10 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const sessionId = id(b.sessionId, 'sessionId');
       await getItem(pk, `SESSION#${sessionId}`);
       const photoType = b.photoType === undefined ? undefined : oneOf(PHOTO_TYPES, b.photoType, 'photoType');
+      if (photoType) {
+        const { Item: st } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk, sk: 'SETTINGS' } }));
+        if (st?.photoTermsVersion !== PHOTO_TERMS_VERSION) throw new HttpError(403, 'PHOTO_TERMS');
+      }
       const item = { pk, sk: `CLIMB#${climbId}`, sessionId, ...cleanClimb(b, false), photoType, createdAt: nowIso() };
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       const uploads = photoType && {

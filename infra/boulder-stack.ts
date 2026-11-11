@@ -183,7 +183,9 @@ export class BoulderStack extends Stack {
     const s3Hosts = `https://${photos.bucketName}.s3.amazonaws.com https://${photos.bucketName}.s3.${this.region}.amazonaws.com`;
     const csp = [
       "default-src 'self'",
-      "script-src 'self'",
+      // wasm-unsafe-eval: só permite compilar WebAssembly (o detector de agarras), não eval de JS.
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "worker-src 'self' blob:",
       "style-src 'self'",
       `img-src 'self' blob: data: ${s3Hosts}`,
       `connect-src 'self' ${s3Hosts} ${cognitoDomain}`,
@@ -200,6 +202,14 @@ export class BoulderStack extends Stack {
         contentTypeOptions: { override: true },
         frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
         referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+      },
+      // Isolamento de origem: libera o detector em várias threads. "credentialless" mantém as
+      // fotos do S3 carregando sem cabeçalho extra; navegador sem suporte roda em 1 thread.
+      customHeadersBehavior: {
+        customHeaders: [
+          { header: 'Cross-Origin-Opener-Policy', value: 'same-origin', override: true },
+          { header: 'Cross-Origin-Embedder-Policy', value: 'credentialless', override: true },
+        ],
       },
     });
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
@@ -238,6 +248,17 @@ export class BoulderStack extends Stack {
       destinationBucket: webBucket,
       cacheControl: [s3deploy.CacheControl.fromString('public, max-age=31536000, immutable')],
       prune: false,
+    });
+    // Runtime WebAssembly do detector (15 MB → 3,7 MB): já vai em gzip, porque o CloudFront
+    // só comprime arquivos de até 10 MB. A versão do onnxruntime está no caminho.
+    new s3deploy.BucketDeployment(this, 'DeployWasm', {
+      sources: [s3deploy.Source.asset(path.join(dist, 'gz'))],
+      destinationBucket: webBucket,
+      contentEncoding: 'gzip',
+      contentType: 'application/wasm',
+      cacheControl: [s3deploy.CacheControl.fromString('public, max-age=31536000, immutable')],
+      prune: false,
+      memoryLimit: 512,
     });
     new s3deploy.BucketDeployment(this, 'DeployPages', {
       sources: [
