@@ -7,7 +7,7 @@ import { $, getTheme, setTheme, state, h, fill, svg, toast, fail, seg, stepper, 
 import { SHARE_ICON, lineIcon, icon } from './game.js';
 import { openSheet } from './session.js';
 import { termsBody, debounce } from './climb.js';
-import { social, feed } from './social.js';
+import { social, feed } from './ui/social.jsx';
 
 // ---------- ajustes ----------
 export function settingsSheet() {

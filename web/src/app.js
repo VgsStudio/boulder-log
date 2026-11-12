@@ -11,7 +11,7 @@ import { streakSheet } from './ui/game.jsx';
 import { Session } from './ui/session.jsx';
 import { checkAutoEnd, openSheet, sheetSwipe } from './session.js';
 import { onCameraPhoto, viewNew, viewClimb, debounce, viewShare, backfillPreviews } from './climb.js';
-import { profileSheet, viewFriends, viewMe, viewUser, feed, viewFeed } from './social.js';
+import { profileSheet, Friends, Me, User, feed, Feed } from './ui/social.jsx';
 import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './settings.js';
 
 // ---------- roteamento ----------
@@ -22,10 +22,10 @@ const ROUTES = [
   [/^#\/history$/, () => mount(createElement(History)), 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
   [/^#\/progress$/, () => mount(createElement(Progress)), 'profile'],
-  [/^#\/feed$/, viewFeed, 'feed'],
-  [/^#\/me$/, viewMe, 'profile'],
-  [/^#\/friends$/, viewFriends, 'profile'],
-  [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'profile'],
+  [/^#\/feed$/, () => mount(createElement(Feed)), 'feed'],
+  [/^#\/me$/, () => mount(createElement(Me)), 'profile'],
+  [/^#\/friends$/, () => mount(createElement(Friends)), 'profile'],
+  [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => mount(createElement(User, { handle, key: handle })), 'profile'],
 ];
 
 // Rolagem: a posição fica guardada na própria entrada do histórico (history.state), então "voltar"

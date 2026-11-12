@@ -9,7 +9,8 @@ import { PHOTO_TERMS_VERSION, HOLD_TYPES, WALL_ANGLES, STYLE_TAGS, RESULTS, $, s
 import { PIN_ICON, PENCIL_ICON, CHECK_ICON, SHARE_ICON, lineIcon, hold, icon } from './game.js';
 import { celebrate } from './ui/game.jsx';
 import { openSheet } from './session.js';
-import { avatar, pinClimb, followButton } from './social.js';
+import { avatar, followButton } from './social.js';
+import { pinClimb } from './ui/social.jsx';
 import { runTour, standalone, isIOS } from './settings.js';
 
 // ---------- termo de uso das fotos ----------
@@ -829,30 +830,6 @@ export async function backfillPreviews() {
     } catch { /* tenta de novo na próxima abertura */ }
     await new Promise((r) => setTimeout(r, 400));
   }
-}
-
-/** Lista de seguidores / seguindo (como no Instagram). */
-export async function peopleSheet(u, type) {
-  const box = h('div', { class: 'stack' });
-  const tabs = (cur) => seg([['followers', t('profile.followers', { n: u.followers })], ['following', t('profile.following', { n: u.follows })]], cur, (v) => load(v));
-  const load = async (kind) => {
-    fill(box, tabs(kind), h('p', { class: 'small detect-status loading' }, t('friends.loading')));
-    try {
-      const people = await api(`/users/${u.handle}/people?type=${kind}`);
-      fill(box, tabs(kind),
-        people.length
-          ? h('ul', { class: 'list' }, people.map((p) => h('li', {}, h('a', { class: 'person-row', href: `#/u/${p.handle}`, onclick: () => $('#sheet').close() },
-            avatar(p), h('div', { class: 'grow' }, h('strong', {}, p.name), h('div', { class: 'muted small' }, `@${p.handle}`)),
-            !p.me && followButton(p)))))
-          : h('p', { class: 'muted' }, kind === 'followers' ? t('people.noFollowers') : t('people.noFollowing')),
-        h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')));
-    } catch (err) {
-      fill(box, tabs(kind), h('p', { class: 'muted' }, err.status === 403 ? t('people.private') : t('error.generic')),
-        h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')));
-    }
-  };
-  openSheet(box);
-  load(type);
 }
 
 // ---------- navegar entre boulders (‹ › e arrastar, como no Instagram) ----------
