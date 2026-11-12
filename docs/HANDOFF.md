@@ -21,7 +21,7 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 
 | Área | O que faz |
 |---|---|
-| **Abas** | Só ícones: **Sessão + Histórico** (montanha; `#/history` rola até o histórico) · **📷 (centro)** · **Ranking** (troféu, `#/friends`: ranking da semana, busca e sugestões; saiu de dentro do perfil) · **Perfil**. O app abre no perfil (sem conta, na Sessão). A **Home (feed) está escondida** enquanto há poucos usuários: `HOME_ON = false` em `ui/shell.jsx`; a rota `#/feed` continua funcionando. A Evolução fica dentro do Perfil (`#/progress`). |
+| **Abas** | Só ícones: **Sessão + Histórico** (montanha; `#/history` rola até o histórico) · **📷 (centro)** · **Ranking** (troféu, `#/friends`: ranking da semana, busca e sugestões; saiu de dentro do perfil) · **Perfil**. O app abre no perfil (sem conta, na Sessão). A **Home (feed) está escondida** enquanto há poucos usuários: `HOME_ON = false` em `ui/shell.jsx`; a rota `#/feed` continua funcionando. A Evolução fica dentro do Perfil (`#/progress`). **Arrastar para os lados** troca de aba (Sessão ↔ Ranking ↔ Perfil); dentro de uma tela (boulder, perfil de alguém, Evolução), arrastar para a direita volta. O arrasto é ignorado sobre foto, faixas que rolam, linhas arrastáveis e campos (`OWNED` em `ui/shell.jsx`). A barra de cima rola com a página; a **engrenagem dos Ajustes fica no perfil**. |
 | **Câmera** (centro da barra) | Foto → novo boulder direto. Sem sessão aberta, abre uma no último ginásio usado. |
 | **Registro rápido** | Na sessão: cor + grau + resultado numa janela, sem foto. |
 | **Sessão** | Começa no ginásio (reconhecido por GPS, até 500 m). Registra boulders e encerra com sensação/nota. **Encerra sozinha**: >1 km do ginásio (com o app aberto, a cada 5 min) ou 4 h sem registro. |

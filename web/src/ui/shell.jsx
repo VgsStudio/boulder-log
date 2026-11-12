@@ -67,6 +67,7 @@ export function App() {
   useEffect(() => { document.body.classList.toggle('offline', sh.offline); }, [sh.offline]);
   useEffect(() => { if (sh.ready && !sh.auth) pageview(route.name); }, [currentHash(), sh.ready, sh.auth]); // eslint-disable-line react-hooks/exhaustive-deps
   const showChrome = sh.ready && !sh.auth;
+  useSwipeNav(showChrome);
   return (
     <>
       <header className="top">
@@ -75,11 +76,6 @@ export function App() {
           {showChrome && <Bell />}
           {showChrome && <StreakPill />}
           {guestMode && !sh.auth && sh.ready && <button className="btn small-btn primary" type="button" onClick={() => showAuth({ mode: 'signup' })}>{t('guest.cta')}</button>}
-          {showChrome && (
-            <button className="icon-btn" id="open-settings" type="button" aria-label={t('settings.title')} onClick={settingsSheet}>
-              <svg className="gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx={12} cy={12} r={3} /></svg>
-            </button>
-          )}
         </div>
       </header>
       <p className="offline-bar" role="status">{t('offline.bar')}</p>
@@ -91,6 +87,13 @@ export function App() {
   );
 }
 const Screen = ({ children }) => children;
+
+/** Ajustes: engrenagem que fica no perfil (antes ficava na barra de cima). */
+export const SettingsButton = () => (
+  <button className="icon-btn settings-btn" id="open-settings" type="button" aria-label={t('settings.title')} onClick={settingsSheet}>
+    <svg className="gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx={12} cy={12} r={3} /></svg>
+  </button>
+);
 
 /** Aba da montanha: a sessão (começar / aberta) e, logo abaixo, o histórico. */
 function SessionAndHistory({ toHistory = false }) {
@@ -125,6 +128,54 @@ function TabBar({ hidden, tab }) {
         )))}
     </nav>
   );
+}
+
+// ---------- navegar com o dedo (como no Instagram) ----------
+/** Abas principais na ordem da barra (a câmera não é tela). */
+const tabOrder = () => TABS.filter((x) => x && x !== false).map((x) => x[0]);
+const topOf = (hash) => {
+  const h = hash || currentHash();
+  if (h === '#/' || h === '#/history') return '#/';
+  return tabOrder().includes(h) ? h : null;
+};
+// Onde o arrasto já tem outro dono: foto (zoom/pincel), faixas que rolam para o lado, linhas arrastáveis, campos.
+const OWNED = '.stage, .nav-wrap, .chips.scroll, .suggest, .achs.scroll, .swipe, .seg, input, textarea, select, .tour';
+
+/** A tela nova entra deslizando do lado do arrasto (só nessa troca). */
+const slide = (dir) => {
+  const v = document.getElementById('view');
+  v?.setAttribute('data-slide', dir);
+  setTimeout(() => v?.removeAttribute('data-slide'), 400);
+};
+
+/** Arrastar para os lados: nas abas principais troca de aba; dentro de uma tela, arrastar para a direita volta. */
+function useSwipeNav(on) {
+  useEffect(() => {
+    if (!on) return undefined;
+    let g = null;
+    const start = (e) => {
+      if (e.touches.length !== 1 || document.getElementById('sheet')?.open || e.target.closest?.(OWNED)) { g = null; return; }
+      g = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    };
+    const end = (e) => {
+      if (!g) return;
+      const dx = e.changedTouches[0].clientX - g.x, dy = e.changedTouches[0].clientY - g.y, dt = Date.now() - g.t;
+      g = null;
+      if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 700) return;
+      const top = topOf(location.hash);
+      if (top) {
+        const order = tabOrder();
+        const next = order[order.indexOf(top) + (dx < 0 ? 1 : -1)];
+        if (next) { slide(dx < 0 ? 'left' : 'right'); location.hash = next; }
+      } else if (dx > 0) {
+        slide('right');
+        history.length > 1 ? history.back() : (location.hash = '#/me');
+      }
+    };
+    window.addEventListener('touchstart', start, { passive: true });
+    window.addEventListener('touchend', end, { passive: true });
+    return () => { window.removeEventListener('touchstart', start); window.removeEventListener('touchend', end); };
+  }, [on]);
 }
 
 // ---------- sem conta e login ----------

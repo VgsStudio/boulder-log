@@ -12,6 +12,7 @@ import { setNav } from './climb.jsx';
 import { ClimbStage, WithNav } from './photo.jsx';
 import { useStore, useRedraw, Seg, Swatch, FadeImg, lqipBg } from './base.jsx';
 import { Icon, LineIcon, streakSheet } from './game.jsx';
+import { SettingsButton } from './shell.jsx';
 import { historyUi } from './history.jsx';
 
 const closeSheet = () => $('#sheet').close();
@@ -261,6 +262,7 @@ export function Me() {
           <h2>{t('guest.profileTitle')}</h2><p className="muted">{t('guest.profileLead')}</p>
           <button className="btn primary big block" type="button" onClick={() => showAuth({ mode: 'signup' })}>{t('auth.signup')}</button>
           <button className="btn block" type="button" onClick={() => showAuth({ mode: 'login' })}>{t('guest.haveAccount')}</button>
+          <div className="row"><span className="grow muted small">{t('settings.title')}</span><SettingsButton /></div>
         </section>
       </div>
     );
@@ -272,6 +274,7 @@ export function Me() {
       <section className="card stack">
         <h2>{t('profile.create')}</h2><p className="muted">{t('profile.lead')}</p>
         <button className="btn primary big block" type="button" onClick={async () => { if (await profileSheet()) render(); }}>{t('profile.create')}</button>
+        <div className="row"><span className="grow muted small">{t('settings.title')}</span><SettingsButton /></div>
       </section>
     </div>
   );
@@ -322,7 +325,7 @@ export function User({ handle, isTab = false }) {
         </div>
       </section>
       {u.me
-        ? <div className="row"><button className="btn grow" type="button" onClick={async () => { if (await profileSheet()) load(); }}>{t('profile.edit')}</button><ShareProfileButton u={u} /></div>
+        ? <div className="row profile-actions"><button className="btn grow" type="button" onClick={async () => { if (await profileSheet()) load(); }}>{t('profile.edit')}</button><ShareProfileButton u={u} /><SettingsButton /></div>
         : u.blocked
           ? <p className="muted">{t('block.youBlocked')}</p>
           : (

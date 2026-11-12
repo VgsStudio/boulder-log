@@ -738,3 +738,15 @@ img.fade.in { opacity: 1; }
 .bell-dot { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--pink-deep); color: #fff; font-size: .7rem; font-weight: 800; line-height: 18px; text-align: center; }
 .inbox li.new { background: var(--blue-soft); border-radius: 12px; }
 .inbox-ico { width: 40px; height: 40px; display: grid; place-items: center; font-size: 1.3rem; }
+
+/* Barra de cima rola junto com a página (não fica presa) */
+.top { position: static; }
+.settings-btn { margin-right: 0; border: 2px solid var(--line); border-radius: 14px; width: 48px; height: 48px; }
+/* Troca de aba pelo arrasto: a tela nova entra deslizando */
+@keyframes slide-l { from { transform: translateX(28px); opacity: .4; } }
+@keyframes slide-r { from { transform: translateX(-28px); opacity: .4; } }
+main[data-slide="left"] > * { animation: slide-l .22s ease-out; }
+main[data-slide="right"] > * { animation: slide-r .22s ease-out; }
+@media (prefers-reduced-motion: reduce) { main[data-slide] > * { animation: none; } }
+.profile-actions { gap: 8px; }
+.profile-actions .btn { white-space: nowrap; padding: 0 14px; }
