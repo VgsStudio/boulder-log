@@ -561,3 +561,14 @@ html:has(dialog[open]) { overflow: hidden; }
 .stars svg { width: 100%; height: 100%; fill: currentColor; stroke: none; transition: transform .12s; }
 .stars button.on { color: var(--yellow); }
 .stars button:active svg { transform: scale(.88); }
+
+/* Agarra de início (verde) e de topo (vermelha). Segurar no quadro não abre o menu do iOS. */
+.overlay rect.start { stroke: #1fbf6a; stroke-width: 4; }
+.overlay rect.top { stroke: #ff3d4f; stroke-width: 4; }
+.stage { -webkit-touch-callout: none; }
+
+.gallery .status-tag { position: absolute; right: 6px; top: 6px; padding: 2px 8px; border-radius: 9px; font-size: .72rem; font-weight: 900; color: #fff; }
+.status-tag.s-sent, .status-tag.s-flash { background: var(--green); }
+.status-tag.s-flash { background: var(--yellow-deep); }
+.status-tag.s-project { background: var(--blue); }
+.status-tag.s-dropped { background: #6b7190; }

@@ -738,7 +738,8 @@ function viewNew() {
         sessionId: s.id, color: d.color, grade: d.grade, attempts: d.attempts, result: d.result,
         ...(d.note.trim() ? { note: d.note.trim() } : {}),
         ...(d.tap ? { tap: d.tap } : {}),
-        ...(d.route?.length ? { holds: d.route.slice(0, 80).map(({ x, y, w, h: hh }) => ({ x, y, w, h: hh })) } : {}),
+        ...(d.route?.length ? { holds: d.route.slice(0, 80).map(holdOut) } : {}),
+        ...(d.boxes?.length ? { cands: d.boxes.slice(0, 300).map(boxOut) } : {}),
         ...(d.projectId ? { projectId: d.projectId } : {}),
         ...(full ? { photoType: full.type } : {}),
       };
@@ -792,7 +793,9 @@ function viewNew() {
           ? h('section', {},
             stage([d.canvas,
               holdsOverlay(d.route, d.boxes),
-              d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap, d.zoom),
+              // A bolinha do toque só enquanto não há via marcada (depois as caixas mostram tudo).
+              d.tap && !d.route?.length && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap, d.zoom,
+              (x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } }),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
@@ -840,6 +843,17 @@ function viewNew() {
   return root;
 }
 
+/** Toque longo numa agarra marcada: início (verde) → topo (vermelha) → normal. */
+function cycleRole(holds, x, y) {
+  const b = holds.filter((h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h).sort((a, c) => a.w * a.h - c.w * c.h)[0];
+  if (!b) return false;
+  b.role = b.role === 'start' ? 'top' : b.role === 'top' ? undefined : 'start';
+  if (!b.role) delete b.role;
+  return true;
+}
+const holdOut = ({ x, y, w, h: hh, role }) => ({ x, y, w, h: hh, ...(role ? { role } : {}) });
+const boxOut = ({ x, y, w, h: hh }) => ({ x, y, w, h: hh });
+
 /** Caixas das agarras da via sobre a foto (coordenadas 0-1). */
 function holdsOverlay(holds, all = []) {
   if (!holds?.length && !all?.length) return null;
@@ -848,7 +862,7 @@ function holdsOverlay(holds, all = []) {
     others.map((b) => svg('rect', { class: 'cand', x: b.x, y: b.y, width: b.w, height: b.h })),
     (holds ?? []).flatMap((b) => [
       svg('rect', { class: 'under', x: b.x, y: b.y, width: b.w, height: b.h }),
-      svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h }),
+      svg('rect', { x: b.x, y: b.y, width: b.w, height: b.h, class: b.role ?? null }),
     ]));
 }
 
@@ -961,9 +975,10 @@ function viewClimb(id) {
   const saveHolds = async (ev) => {
     ev.currentTarget.disabled = true;
     const r = rootOf(climbOf(id));
-    const holds = holdEdit.holds.slice(0, 80).map(({ x, y, w, h: hh }) => ({ x, y, w, h: hh }));
+    const holds = holdEdit.holds.slice(0, 80).map(holdOut);
+    const cands = holdEdit.boxes?.length ? { cands: holdEdit.boxes.slice(0, 300).map(boxOut) } : {};
     try {
-      upsert(state.climbs, await api(`/climbs/${r.id}`, { method: 'PATCH', body: { holds } }));
+      upsert(state.climbs, await api(`/climbs/${r.id}`, { method: 'PATCH', body: { holds, ...cands } }));
       holdEdit = null;
       toast(t('holds.saved'));
       draw();
@@ -1001,7 +1016,8 @@ function viewClimb(id) {
       r.photoType && (holdEdit
         ? h('section', { class: 'stack' },
           holdEdit.canvas
-            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom)
+            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom,
+              (x, y) => { if (cycleRole(holdEdit.holds, x, y)) { playTick(); draw(); } })
             : null,
           h('p', { class: `small detect-status ${holdEdit.status}` },
             holdEdit.status === 'loading' ? t('detect.loading') : holdEdit.status === 'failed' ? t('detect.failed') : t('holds.hint', { n: holdEdit.holds.length })),
@@ -1122,7 +1138,7 @@ function viewShare(token) {
 // ---------- foto com zoom ----------
 /** Quadro da foto com pinça para ampliar só a foto (não a página) e arrastar quando ampliada.
  *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom. */
-function stage(content, onTap, z = { k: 1, x: 0, y: 0 }) {
+function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null) {
   const inner = h('div', { class: 'zoom' }, content);
   const reset = h('button', { class: 'zoom-reset', type: 'button', hidden: true, onclick: (e) => { e.stopPropagation(); z.k = 1; z.x = z.y = 0; apply(); } }, t('zoom.reset'));
   const box = h('div', { class: 'stage' }, inner, reset);
@@ -1143,11 +1159,28 @@ function stage(content, onTap, z = { k: 1, x: 0, y: 0 }) {
     const mid = b ? { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top } : { x: a.x - r.left, y: a.y - r.top };
     return { mid, dist: b ? Math.hypot(a.x - b.x, a.y - b.y) : 0, k: z.k, x: z.x, y: z.y, n: pts.size };
   };
+  let longTimer;
+  const at = (cx, cy) => {
+    const r = inner.getBoundingClientRect(); // já com o zoom aplicado
+    return [Math.min(1, Math.max(0, (cx - r.left) / r.width)), Math.min(1, Math.max(0, (cy - r.top) / r.height))];
+  };
   box.addEventListener('pointerdown', (e) => {
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY, t0: Date.now(), x0: e.clientX, y0: e.clientY });
     start = snapshot();
+    clearTimeout(longTimer);
     if (pts.size > 1) start.multi = true;
+    else if (onLong) {
+      // Segurar ~0,5 s parado = toque longo (marca início/topo).
+      const g = start;
+      longTimer = setTimeout(() => {
+        if (g !== start || g.moved || g.multi || pts.size !== 1) return;
+        g.long = true;
+        try { navigator.vibrate?.(25); } catch {}
+        onLong(...at(e.clientX, e.clientY));
+      }, 500);
+    }
   });
+  box.addEventListener('contextmenu', (e) => e.preventDefault());
   box.addEventListener('pointermove', (e) => {
     const p = pts.get(e.pointerId);
     if (!p) return;
@@ -1171,9 +1204,9 @@ function stage(content, onTap, z = { k: 1, x: 0, y: 0 }) {
     const p = pts.get(e.pointerId);
     if (!p) return;
     pts.delete(e.pointerId);
-    if (e.type === 'pointerup' && onTap && !pts.size && !start.multi && !start.moved && Date.now() - p.t0 < 600) {
-      const r = inner.getBoundingClientRect(); // já com o zoom aplicado
-      onTap(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)));
+    clearTimeout(longTimer);
+    if (e.type === 'pointerup' && onTap && !pts.size && !start.multi && !start.moved && !start.long && Date.now() - p.t0 < 600) {
+      onTap(...at(e.clientX, e.clientY));
     }
     if (pts.size) start = { ...snapshot(), multi: true };
   };
@@ -1199,8 +1232,7 @@ function photoImg(full, thumb) {
 /** Foto de um boulder com as agarras da via marcadas. */
 const climbStage = (url, c) => url && stage([
   photoImg(url, c.thumbUrl),
-  holdsOverlay(c.holds),
-  c.tap && h('span', { class: 'marker', style: { '--x': `${c.tap.x * 100}%`, '--y': `${c.tap.y * 100}%` } })]);
+  holdsOverlay(c.holds)]);
 
 // ---------- social: perfil, amigos, ranking ----------
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
@@ -1381,6 +1413,10 @@ function friendsCard() {
   return box;
 }
 
+const STATUS_FILTERS = ['all', 'sent', 'project', 'dropped'];
+let profileFilter = 'all';
+const userCache = new Map(); // perfis já abertos (as URLs das fotos valem 1 h; a volta recarrega por trás)
+
 function viewUser(handle, isTab = false) {
   const box = h('div', { class: 'stack' }, h('p', { class: 'small detect-status loading' }, t('friends.loading')));
   const draw = (u) => fill(box,
@@ -1419,15 +1455,22 @@ function viewUser(handle, isTab = false) {
             [u.stats.maxGrade == null ? '—' : grade(u.stats.maxGrade), t('profile.max')], [u.stats.streak, t('streak.weeks')]]
             .map(([v, l]) => h('div', { class: 'kpi' }, h('b', {}, String(v)), h('span', {}, l)))),
         h('h2', {}, t('profile.history')),
-        u.climbs.length
-          ? h('div', { class: 'gallery' }, u.climbs.map((c) => h('button', { type: 'button', onclick: () => (u.me ? (location.hash = `#/climb/${c.id}`) : friendClimbSheet(u, c)) },
-            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
-            h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
-          : h('p', { class: 'muted' }, t('history.empty')),
+        u.climbs.length > 0 && seg(STATUS_FILTERS.map((f) => [f, t(`status.filter.${f}`)]), profileFilter, (f) => { profileFilter = f; draw(u); }),
+        (() => {
+          const list = u.climbs.filter((c) => profileFilter === 'all' || (profileFilter === 'sent' ? ['sent', 'flash'].includes(c.status) : c.status === profileFilter));
+          return list.length
+            ? h('div', { class: 'gallery' }, list.map((c) => h('button', { type: 'button', onclick: () => (u.me ? (location.hash = `#/climb/${c.id}`) : friendClimbSheet(u, c)) },
+              h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
+              c.status && h('span', { class: `status-tag s-${c.status}` }, t(`status.${c.status}`)),
+              h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
+            : h('p', { class: 'muted' }, t('history.empty'));
+        })(),
       ]
       : h('section', { class: 'card locked' }, icon('lock'), h('p', {}, u.following ? t('profile.lockedBack') : t('profile.locked'))),
   );
-  const load = () => api(`/users/${handle}`).then(draw, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('profile.notFound') : t('error.generic'))));
+  const load = () => api(`/users/${handle}`).then((u) => { userCache.set(handle, u); draw(u); restoreScroll(); },
+    (err) => { if (!userCache.has(handle)) fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('profile.notFound') : t('error.generic'))); });
+  if (userCache.has(handle)) { draw(userCache.get(handle)); }
   load();
   return box;
 }
@@ -1784,12 +1827,22 @@ const ROUTES = [
   [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'profile'],
 ];
 
+// Rolagem: a posição fica guardada na própria entrada do histórico (history.state), então "voltar"
+// devolve a tela onde estava e um link novo começa do topo.
+let wantScroll = 0;
+const restoreScroll = () => { if (wantScroll) window.scrollTo(0, wantScroll); };
+window.addEventListener('scroll', debounce(() => {
+  try { history.replaceState({ ...(history.state ?? {}), y: window.scrollY }, ''); } catch {}
+}, 120), { passive: true });
+
 function render() {
   timers.forEach(clearInterval);
   timers = [];
   const hash = location.hash || '#/';
   const [re, fn, tab] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
+  wantScroll = history.state?.y ?? 0;
   view.replaceChildren(fn(...(hash.match(re)?.slice(1) ?? [])));
+  window.scrollTo(0, wantScroll);
   streakPill();
   document.querySelectorAll('#tabbar a').forEach((a) => (a.dataset.tab === tab ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
 }

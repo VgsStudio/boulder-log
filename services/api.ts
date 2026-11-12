@@ -57,6 +57,9 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
   }
   if (has('projectId')) out.projectId = id(b.projectId, 'projectId');
   if (has('holds')) out.holds = cleanHolds(b.holds);
+  // Todas as agarras que o detector achou na foto (para treinar um modelo próprio no futuro:
+  // `holds` diz quais dessas são da via, corrigidas pela pessoa).
+  if (has('cands')) out.cands = cleanHolds(b.cands, 300).map(({ x, y, w, h }) => ({ x, y, w, h }));
   // Projeto encerrado sem mandar (a via saiu / desistiu); a data vem do servidor.
   if (partial && has('dropped')) {
     if (typeof b.dropped !== 'boolean') bad('dropped');
@@ -73,13 +76,15 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
 }
 
 /** Agarras da via vindas do detector no navegador: caixas normalizadas 0-1, no máximo 80. */
-export function cleanHolds(v: unknown) {
-  if (!Array.isArray(v) || v.length > 80) bad('holds');
+/** `role`: agarra de início (verde) ou topo (vermelha). `max`: 80 na via; 300 nas candidatas do detector. */
+export function cleanHolds(v: unknown, max = 80) {
+  if (!Array.isArray(v) || v.length > max) bad('holds');
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
   return (v as Record<string, unknown>[]).map((b) => {
     const [x, y, w, h] = [b?.x, b?.y, b?.w, b?.h].map((n) => unit(n, 'holds'));
     if (w === 0 || h === 0) bad('holds');
-    return { x: r3(x), y: r3(y), w: r3(w), h: r3(h) };
+    const role = b?.role === undefined || b.role === null ? undefined : oneOf(['start', 'top'] as const, b.role, 'holds');
+    return { x: r3(x), y: r3(y), w: r3(w), h: r3(h), ...(role ? { role } : {}) };
   });
 }
 
@@ -595,10 +600,14 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         queryAll(pkOf(them), 'CLIMB#'), queryAll(pkOf(them), 'SESSION#'),
       ]);
       const friends = me || (following && followsMe);
+      // Situação de cada boulder: projeto mandado depois (numa tentativa) conta como mandado.
+      const sentRoots = new Set(climbs.filter((c) => c.projectId && isSend(c)).map((c) => c.projectId));
+      const status = (c: Record<string, unknown>, cid: string) => (c.result === 'flash' ? 'flash'
+        : isSend(c) || sentRoots.has(cid) ? 'sent' : c.dropped ? 'dropped' : 'project');
       const photo = async (c: Record<string, unknown>) => {
         const cid = String(c.sk).split('#')[1];
         return {
-          id: cid, color: c.color, grade: c.grade, result: c.result, createdAt: c.createdAt, holds: c.holds, tap: c.tap,
+          id: cid, color: c.color, grade: c.grade, result: c.result, status: status(c, cid), createdAt: c.createdAt, holds: c.holds, tap: c.tap,
           thumbUrl: c.photoType ? await signGet(photoKey(them, cid, 'thumb')) : null,
           photoUrl: c.photoType ? await signGet(photoKey(them, cid, 'full')) : null,
         };

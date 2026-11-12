@@ -18,3 +18,11 @@ test('desistir do projeto: só boolean e só em edição', () => {
   assert.equal(cleanClimb({ dropped: false }, true).droppedAt, null);
   assert.throws(() => cleanClimb({ dropped: 'sim' }, true), /INVALID_DROPPED/);
 });
+
+test('cleanHolds: guarda início/topo e recusa papel inventado', () => {
+  assert.deepEqual(cleanHolds([{ x: 0.1, y: 0.2, w: 0.05, h: 0.05, role: 'start' }, { x: 0.3, y: 0.1, w: 0.05, h: 0.05 }]),
+    [{ x: 0.1, y: 0.2, w: 0.05, h: 0.05, role: 'start' }, { x: 0.3, y: 0.1, w: 0.05, h: 0.05 }]);
+  assert.throws(() => cleanHolds([{ x: 0.1, y: 0.2, w: 0.05, h: 0.05, role: 'admin' }]));
+  assert.throws(() => cleanHolds(Array(81).fill({ x: 0.1, y: 0.1, w: 0.1, h: 0.1 })));
+  assert.equal(cleanHolds(Array(300).fill({ x: 0.1, y: 0.1, w: 0.1, h: 0.1 }), 300).length, 300);
+});
