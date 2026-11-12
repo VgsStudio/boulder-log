@@ -51,6 +51,8 @@ const css = Object.keys(out.metafile.outputs).map((f) => path.basename(f)).find(
 
 const html = readFileSync(path.join(root, 'web/index.html'), 'utf8').replace('__JS__', js).replace('__CSS__', css);
 writeFileSync(path.join(dist, 'pages/index.html'), html);
+// Service worker na raiz (escopo do app inteiro), com a versão do build no nome do cache.
+writeFileSync(path.join(dist, 'pages/sw.js'), readFileSync(path.join(root, 'web/sw.js'), 'utf8').replace('__VERSION__', js.replace(/\.js$/, '')));
 for (const f of ['manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'email/banner.png', 'privacidade.html', 'termos.html', 'legal.css']) cpSync(path.join(root, 'web', f), path.join(dist, 'pages', f));
 
 // Modelo de agarras (versão no nome do arquivo) e runtime WebAssembly.

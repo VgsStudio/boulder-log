@@ -217,6 +217,20 @@ async function loadAll() {
   const [gyms, sessions, climbs, settings, profile] = await Promise.all([api('/gyms'), api('/sessions'), api('/climbs'), api('/settings'), api('/profile')]);
   Object.assign(state, { gyms, sessions, climbs, profile: profile.handle ? profile : null, loadedAt: Date.now() });
   state.settings = { ...state.settings, ...settings };
+  // Cópia para abrir sem sinal (ginásio). Fotos não vão (URLs assinadas expiram).
+  if (!guestMode) {
+    try { localStorage.setItem('cm:snap', JSON.stringify({ gyms, sessions, climbs: climbs.map(({ thumbUrl: _t, ...c }) => c), settings, profile })); } catch {}
+  }
+}
+/** Sem sinal: abre com a última cópia dos dados (só leitura de verdade; gravar pede conexão). */
+function loadSnapshot() {
+  try {
+    const s = JSON.parse(localStorage.getItem('cm:snap'));
+    if (!s) return false;
+    Object.assign(state, { gyms: s.gyms, sessions: s.sessions, climbs: s.climbs, profile: s.profile?.handle ? s.profile : null, loadedAt: 0 });
+    state.settings = { ...state.settings, ...s.settings };
+    return true;
+  } catch { return false; }
 }
 const activeSession = () => state.sessions.find((s) => !s.endedAt);
 const gymOf = (id) => state.gyms.find((g) => g.id === id);
@@ -2159,7 +2173,10 @@ async function boot() {
   $('#open-settings').addEventListener('click', settingsSheet);
   $('#streak-pill').addEventListener('click', streakSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
-  cfg = await (await fetch('/config.json', { cache: 'no-store' })).json();
+  // Service worker: abre sem sinal e recebe notificações.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('sw', e));
+  try { cfg = await (await fetch('/config.json', { cache: 'no-store' })).json(); } catch { cfg = JSON.parse(localStorage.getItem('cm:cfg') || '{}'); }
+  try { localStorage.setItem('cm:cfg', JSON.stringify(cfg)); } catch {}
   const pending = guestPending();
   if (!(await idToken())) {
     // Sem conta: usa normalmente; os dados ficam no navegador. Depois de 1 dia, só com conta.
@@ -2174,8 +2191,13 @@ async function boot() {
   try {
     await loadAll();
   } catch (e) {
-    if (e.message !== 'auth') fail(e);
-    return;
+    if (e.message === 'auth') return;
+    // Sem sinal: segue com a última cópia e um aviso; volta sozinho quando a conexão voltar.
+    if (!navigator.onLine || e instanceof TypeError) {
+      if (!loadSnapshot()) { fail(e); return; }
+      document.body.classList.add('offline');
+      window.addEventListener('online', () => location.reload(), { once: true });
+    } else { fail(e); return; }
   }
   $('#tabbar').hidden = false;
   $('#open-settings').hidden = false;
