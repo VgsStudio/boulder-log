@@ -93,6 +93,7 @@ export class BoulderStack extends Stack {
         ALLOWED_ORIGIN: allOrigins.join(','),
         AI_MODEL: props.aiModel,
         AI_DAILY_LIMIT: String(props.aiDailyLimit),
+        AI_GLOBAL_LIMIT: '200',
       },
       logGroup: new logs.LogGroup(this, 'ApiFnLogs', { retention: logs.RetentionDays.TWO_WEEKS, removalPolicy: RemovalPolicy.DESTROY }),
       bundling: { minify: true, externalModules: [] },
@@ -145,6 +146,9 @@ export class BoulderStack extends Stack {
       },
       removalPolicy: RemovalPolicy.RETAIN,
     });
+    // Excluir a conta apaga também o login.
+    apiFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+    userPool.grant(apiFn, 'cognito-idp:AdminDeleteUser');
     userPool.addDomain('Domain', {
       cognitoDomain: { domainPrefix: props.cognitoDomainPrefix },
       managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
@@ -214,6 +218,7 @@ export class BoulderStack extends Stack {
       ['/api/climbs/{id}/media', M.GET], ['/api/climbs/{id}/analyze', M.POST],
       ['/api/settings', M.GET], ['/api/settings', M.PUT],
       ['/api/climbs/{id}/share', M.POST], ['/api/shares/{id}', M.GET], ['/api/shares/{id}/accept', M.POST],
+      ['/api/account', M.DELETE],
       ['/api/profile', M.GET], ['/api/profile', M.PUT], ['/api/users', M.GET], ['/api/users/{handle}', M.GET],
       ['/api/users/{handle}/follow', M.POST], ['/api/users/{handle}/follow', M.DELETE],
       ['/api/users/{handle}/climbs/{id}/copy', M.POST], ['/api/social', M.GET],

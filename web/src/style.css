@@ -548,3 +548,10 @@ button.streak-pill { border: 0; cursor: pointer; font: inherit; font-family: var
 /* Janela aberta: a página de trás não rola nem mexe. */
 html:has(dialog[open]) { overflow: hidden; }
 .sheet { overscroll-behavior: contain; }
+
+.danger-link { color: var(--pink-deep); align-self: center; }
+.btn.danger-fill { --face: var(--pink-deep); --base: #8f1240; }
+
+.friends-card { display: block; text-decoration: none; color: inherit; }
+.friends-card h2 { margin: 0; }
+.rank.mini .person-row { padding: 6px 0; }

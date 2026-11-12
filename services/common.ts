@@ -14,6 +14,9 @@ export const PHOTO_BUCKET = env('PHOTO_BUCKET', 'test-photos');
 export const ALLOWED_ORIGINS = env('ALLOWED_ORIGIN', 'https://localhost').split(',');
 export const AI_MODEL = env('AI_MODEL', 'us.anthropic.claude-haiku-4-5-20251001-v1:0');
 export const AI_DAILY_LIMIT = Number(env('AI_DAILY_LIMIT', '20'));
+/** Teto do app inteiro por dia (contas novas não multiplicam o gasto com IA). */
+export const AI_GLOBAL_LIMIT = Number(env('AI_GLOBAL_LIMIT', '200'));
+export const USER_POOL_ID = env('USER_POOL_ID', '');
 
 /** ID ordenável pelo tempo (base36 do ms + aleatório): a ordem do sk já é cronológica. */
 export const newId = () => Date.now().toString(36).padStart(9, '0') + randomBytes(5).toString('hex');

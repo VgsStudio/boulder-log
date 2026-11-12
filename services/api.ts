@@ -1,7 +1,8 @@
 // API do Boulder Log. Toda rota passa pelo autorizador JWT do Cognito; o dono
 // dos dados é sempre o `sub` do token (pk = USER#sub), nunca algo do corpo.
-import { BatchGetCommand, DeleteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { CopyObjectCommand, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { AdminDeleteUserCommand, CognitoIdentityProviderClient } from '@aws-sdk/client-cognito-identity-provider';
+import { BatchGetCommand, BatchWriteCommand, DeleteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { CopyObjectCommand, DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { randomBytes } from 'node:crypto';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -9,7 +10,7 @@ import { analyzePhoto, COLORS, sanitizeAi } from './ai.ts';
 // Mesmas contas de XP/nível/sequência do app (uma fonte só).
 import { distanceKm, isSend, level, streakWeeks, totalXp } from '../web/src/stats.js';
 import {
-  AI_DAILY_LIMIT, ALLOWED_ORIGINS, ddb, HttpError, ID_RE, json, log, newId, nowIso, parseBody, PHOTO_BUCKET, s3, TABLE,
+  AI_DAILY_LIMIT, AI_GLOBAL_LIMIT, ALLOWED_ORIGINS, USER_POOL_ID, ddb, HttpError, ID_RE, json, log, newId, nowIso, parseBody, PHOTO_BUCKET, s3, TABLE,
   type HttpEvent, type HttpResult,
 } from './common.ts';
 
@@ -174,6 +175,16 @@ async function getShare(token: string | undefined) {
   return Item;
 }
 
+/** Nome do ginásio onde o boulder foi registrado (vazio se não der para saber). */
+async function gymNameOf(ownerSub: string, c: Record<string, unknown>) {
+  if (c.gymName) return c.gymName as string;
+  if (!c.sessionId) return undefined;
+  const { Item: s } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(ownerSub), sk: `SESSION#${c.sessionId}` } }));
+  if (!s?.gymId) return undefined;
+  const { Item: g } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(ownerSub), sk: `GYM#${s.gymId}` } }));
+  return g?.name as string | undefined;
+}
+
 /** Cria um projeto "ainda não tentado" na conta de `sub` a partir do boulder de outra pessoa,
  *  copiando a foto (usado pelo link compartilhado e pelo perfil de um amigo). */
 async function copyClimb(sub: string, ownerSub: string, srcId: string, src: Record<string, unknown>, extra: Record<string, unknown>) {
@@ -181,7 +192,7 @@ async function copyClimb(sub: string, ownerSub: string, srcId: string, src: Reco
   const item = {
     pk: pkOf(sub), sk: `CLIMB#${climbId}`,
     color: src.color, grade: src.grade, holds: src.holds, tap: src.tap, ai: src.ai, photoType: src.photoType,
-    result: 'project', attempts: 0, sharedBy: ownerSub, ...extra, createdAt: nowIso(),
+    result: 'project', attempts: 0, sharedBy: ownerSub, gymName: await gymNameOf(ownerSub, src), ...extra, createdAt: nowIso(),
   };
   if (src.photoType) {
     for (const size of ['full', 'thumb'] as const) {
@@ -253,22 +264,85 @@ async function climbsSince(sub: string, since: number) {
   return items;
 }
 
-// ---------- cota diária de IA (contador atômico) ----------
-async function takeAiQuota(pk: string) {
-  const day = nowIso().slice(0, 10);
+// ---------- cota diária de IA (contadores atômicos: por conta e do app inteiro) ----------
+const GLOBAL_PK = 'AIQUOTA#GLOBAL';
+const quotaKey = (pk: string) => ({ pk, sk: `AIQUOTA#${nowIso().slice(0, 10)}` });
+async function bump(pk: string, max: number) {
   try {
     await ddb.send(new UpdateCommand({
       TableName: TABLE,
-      Key: { pk, sk: `AIQUOTA#${day}` },
+      Key: quotaKey(pk),
       UpdateExpression: 'ADD n :one SET #ttl = :ttl',
       ConditionExpression: 'attribute_not_exists(n) OR n < :max',
       ExpressionAttributeNames: { '#ttl': 'ttl' },
-      ExpressionAttributeValues: { ':one': 1, ':max': AI_DAILY_LIMIT, ':ttl': Math.floor(Date.now() / 1000) + 2 * 86400 },
+      ExpressionAttributeValues: { ':one': 1, ':max': max, ':ttl': Math.floor(Date.now() / 1000) + 2 * 86400 },
     }));
+    return true;
   } catch (e) {
-    if ((e as Error).name === 'ConditionalCheckFailedException') throw new HttpError(429, 'AI_DAILY_LIMIT');
+    if ((e as Error).name === 'ConditionalCheckFailedException') return false;
     throw e;
   }
+}
+const refund = (pk: string) =>
+  ddb.send(new UpdateCommand({ TableName: TABLE, Key: quotaKey(pk), UpdateExpression: 'ADD n :m', ExpressionAttributeValues: { ':m': -1 } }));
+async function takeAiQuota(pk: string) {
+  if (!(await bump(pk, AI_DAILY_LIMIT))) throw new HttpError(429, 'AI_DAILY_LIMIT');
+  if (!(await bump(GLOBAL_PK, AI_GLOBAL_LIMIT))) {
+    await refund(pk);
+    log('ai.globalLimit', {});
+    throw new HttpError(429, 'AI_DAILY_LIMIT');
+  }
+}
+
+// ---------- excluir a conta ----------
+const cognito = new CognitoIdentityProviderClient({});
+/** Apaga tudo da pessoa: itens da tabela, laços de seguir dos dois lados, @, links compartilhados,
+ *  fotos e o login no Cognito. Cópias que amigos já fizeram dos boulders dela ficam com eles. */
+async function deleteAccount(sub: string, username: string) {
+  const pk = pkOf(sub);
+  const mine: Record<string, unknown>[] = [];
+  let ExclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await ddb.send(new QueryCommand({ TableName: TABLE, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': pk }, ProjectionExpression: 'pk, sk, handle', ExclusiveStartKey }));
+    mine.push(...(out.Items ?? []));
+    ExclusiveStartKey = out.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  const keys: { pk: string; sk: string }[] = mine.map((x) => ({ pk: String(x.pk), sk: String(x.sk) }));
+  for (const x of mine) {
+    const sk = String(x.sk);
+    // O outro lado de cada laço de seguir.
+    if (sk.startsWith('FOLLOWS#')) keys.push({ pk: pkOf(sk.slice(8)), sk: `FOLLOWER#${sub}` });
+    if (sk.startsWith('FOLLOWER#')) keys.push({ pk: pkOf(sk.slice(9)), sk: `FOLLOWS#${sub}` });
+    if (sk === 'PROFILE' && x.handle) keys.push({ pk: `HANDLE#${x.handle}`, sk: 'HANDLE' });
+  }
+  // Links compartilhados por ela. ponytail: Scan (exclusão é rara); com volume, indexar por dono.
+  ExclusiveStartKey = undefined;
+  do {
+    const out: { Items?: Record<string, unknown>[]; LastEvaluatedKey?: Record<string, unknown> } = await ddb.send(new ScanCommand({
+      TableName: TABLE, FilterExpression: 'begins_with(pk, :s) AND ownerSub = :o',
+      ExpressionAttributeValues: { ':s': 'SHARE#', ':o': sub }, ProjectionExpression: 'pk, sk', ExclusiveStartKey,
+    }));
+    keys.push(...(out.Items ?? []).map((x) => ({ pk: String(x.pk), sk: String(x.sk) })));
+    ExclusiveStartKey = out.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  for (let i = 0; i < keys.length; i += 25) {
+    let req: Record<string, unknown[]> | undefined = { [TABLE]: keys.slice(i, i + 25).map((Key) => ({ DeleteRequest: { Key } })) };
+    for (let tries = 0; req && Object.keys(req).length && tries < 5; tries++) {
+      req = (await ddb.send(new BatchWriteCommand({ RequestItems: req as never }))).UnprocessedItems as never;
+    }
+  }
+  // Fotos (boulders e avatar).
+  let ContinuationToken: string | undefined;
+  do {
+    const out = await s3.send(new ListObjectsV2Command({ Bucket: PHOTO_BUCKET, Prefix: `photos/${sub}/`, ContinuationToken }));
+    const objs = (out.Contents ?? []).map((o) => ({ Key: o.Key! }));
+    if (objs.length) await s3.send(new DeleteObjectsCommand({ Bucket: PHOTO_BUCKET, Delete: { Objects: objs, Quiet: true } }));
+    ContinuationToken = out.NextContinuationToken;
+  } while (ContinuationToken);
+  // Por último o login: se algo acima falhar, a pessoa ainda consegue entrar e tentar de novo.
+  await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: username }))
+    .catch((e) => { if ((e as Error).name !== 'UserNotFoundException') throw e; }); // já tinha saído
+  log('account.deleted', { items: keys.length });
 }
 
 // ---------- rotas ----------
@@ -402,6 +476,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         pk: `SHARE#${token}`, sk: 'SHARE',
         ownerSub: sub, climbId: cid,
         color: c.color, grade: c.grade, holds: c.holds, tap: c.tap, ai: c.ai, photoType: c.photoType,
+        gymName: await gymNameOf(sub, c), // onde a via está: quem recebe sabe em que ginásio tentar
         createdAt: nowIso(),
         ttl: Math.floor(Date.now() / 1000) + SHARE_DAYS * 86400,
       };
@@ -412,9 +487,9 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
     case 'GET /api/shares/{id}': {
       const sh = await getShare(pid);
       const photoUrl = sh.photoType ? await signGet(photoKey(sh.ownerSub as string, sh.climbId as string, 'full')) : null;
-      const { color, grade, holds, tap, ai, createdAt } = sh;
+      const { color, grade, holds, tap, ai, createdAt, gymName } = sh;
       const owner = await profileOf(sh.ownerSub as string);
-      return json(200, { color, grade, holds, tap, ai, createdAt, photoUrl, mine: sh.ownerSub === sub, owner: owner ? await card(owner) : null });
+      return json(200, { color, grade, holds, tap, ai, createdAt, gymName, photoUrl, mine: sh.ownerSub === sub, owner: owner ? await card(owner) : null });
     }
     case 'POST /api/shares/{id}/accept': {
       const sh = await getShare(pid);
@@ -425,6 +500,14 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       log('share.accepted', { share: String(pid).slice(0, 4) });
       return json(201, climb);
     }
+    case 'DELETE /api/account': {
+      // Confirmação explícita no corpo (o app pede para digitar a palavra).
+      if (body().confirm !== 'DELETE') bad('confirm');
+      const username = event.requestContext.authorizer?.jwt?.claims?.['cognito:username'] ?? sub;
+      await deleteAccount(sub, username);
+      return json(200, { ok: true });
+    }
+
     // ---------- perfil ----------
     case 'GET /api/profile': {
       const p = await profileOf(sub);
@@ -614,7 +697,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         ai = await analyzePhoto(bytes, c.photoType as 'image/webp' | 'image/jpeg', { color: c.color as string, tap: c.tap as { x: number; y: number } | undefined });
       } catch (e) {
         // Falha não conta na cota do dia.
-        await ddb.send(new UpdateCommand({ TableName: TABLE, Key: { pk, sk: `AIQUOTA#${nowIso().slice(0, 10)}` }, UpdateExpression: 'ADD n :m', ExpressionAttributeValues: { ':m': -1 } }));
+        await Promise.all([refund(pk), refund(GLOBAL_PK)]);
         const status = (e as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode ?? (e as { status?: number }).status;
         log('ai.failed', { status, error: (e as Error).message.slice(0, 300) });
         throw new HttpError(503, status === 403 || status === 404 ? 'AI_UNAVAILABLE' : 'AI_FAILED');

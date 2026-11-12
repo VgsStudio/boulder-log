@@ -1,6 +1,6 @@
 // Chalkmark: SPA sem framework. Rotas por hash, dados em memória, API em /api.
 import './style.css';
-import { fmtDate, fmtDuration, fmtPct, lang, t } from './i18n.js';
+import { fmtDate, fmtDuration, fmtPct, lang, langChoice, setLang, t } from './i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
 // detect.js é leve; o onnxruntime-web e o modelo (~10 MB) só baixam na primeira foto.
 import { detectHolds, growRegion, holdAt, routeHolds } from './detect.js';
@@ -1014,7 +1014,7 @@ function viewClimb(id) {
       h('section', { class: 'card stack' },
         seg(RESULTS.map((x) => [x, t(`result.${x}`)]), cur.result, (x) => patchClimb({ result: x })),
         cur.note && h('p', { class: 'muted' }, cur.note),
-        h('p', { class: 'muted small' }, fmtDate(cur.createdAt, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), ', ', gymOf(state.sessions.find((s) => s.id === cur.sessionId)?.gymId)?.name ?? '')),
+        h('p', { class: 'muted small' }, fmtDate(cur.createdAt, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }), ', ', gymOf(state.sessions.find((s) => s.id === cur.sessionId)?.gymId)?.name ?? r.gymName ?? '')),
 
       proj && h('section', { class: 'card' },
         h('h2', {}, t('climb.project')),
@@ -1072,7 +1072,10 @@ async function shareClimb(c, btn) {
   try {
     const { token } = await api(`/climbs/${c.id}/share`, { method: 'POST' });
     const url = `${location.origin}/#/s/${token}`;
-    const text = t('share.text', { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
+    const gym = gymOf(state.sessions.find((s) => s.id === c.sessionId)?.gymId)?.name ?? c.gymName;
+    const text = gym
+      ? t('share.textGym', { c: colorName(c.color).toLowerCase(), g: grade(c.grade), gym })
+      : t('share.text', { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
     const copy = async () => {
       try { await navigator.clipboard.writeText(url); toast(t('share.copied')); } catch { toast(url); }
     };
@@ -1103,6 +1106,7 @@ function viewShare(token) {
     fill(box,
       h('p', { class: 'muted small' }, sh.owner ? t('share.receivedFrom', { n: sh.owner.name }) : t('share.received')),
       h('h1', { class: 'row' }, swatch(sh.color), colorName(sh.color), h('span', { class: 'grade-pill' }, grade(sh.grade))),
+      sh.gymName && h('p', { class: 'muted' }, t('share.atGym', { gym: sh.gymName })),
       sh.owner && h('a', { class: 'row person', href: `#/u/${sh.owner.handle}` }, avatar(sh.owner), h('span', {}, h('strong', {}, sh.owner.name), h('span', { class: 'muted small' }, ` @${sh.owner.handle}`))),
       sh.photoUrl && climbStage(sh.photoUrl, sh),
       sh.ai && h('div', { class: 'chips' },
@@ -1311,12 +1315,10 @@ function viewFriends() {
   const draw = () => {
     const d = social.data;
     fill(box,
+      h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => (history.length > 1 ? history.back() : (location.hash = '#/me')) }, `‹ ${t('back')}`)),
       h('h1', {}, t('tab.friends')),
       me
-        ? h('a', { class: 'card row me-card', href: `#/u/${me.handle}` }, avatar(me, 56),
-          h('div', { class: 'grow' }, h('strong', {}, me.name), h('div', { class: 'muted small' }, `@${me.handle}`),
-            d && h('div', { class: 'small num' }, t('profile.counts', { a: d.followers, b: d.following }))),
-          h('span', { class: 'link' }, t('profile.see')))
+        ? null
         : h('section', { class: 'card stack' }, h('h2', {}, t('profile.create')), h('p', { class: 'muted' }, t('profile.lead')),
           h('button', { class: 'btn primary big block', type: 'button', onclick: async () => { if (await profileSheet()) { social.data = null; render(); } } }, t('profile.create'))),
 
@@ -1347,15 +1349,41 @@ function viewFriends() {
   };
   draw();
   if (me && !social.data) {
-    api(`/social?since=${encodeURIComponent(mondayIso())}`).then((x) => { social.data = x; if (location.hash === '#/friends') draw(); }, fail);
+    api(`/social?since=${encodeURIComponent(mondayIso())}`).then((x) => { social.data = x; if (location.hash === '#/friends' || location.hash === '#/me') draw(); }, fail);
   }
   return box;
 }
 
-function viewUser(handle) {
+/** Aba Perfil: o seu perfil (com Amigos dentro), ou o convite para criar um. */
+function viewMe() {
+  if (state.profile) return viewUser(state.profile.handle, true);
+  return h('div', { class: 'stack' },
+    h('h1', {}, t('tab.profile')),
+    h('section', { class: 'card stack' }, h('h2', {}, t('profile.create')), h('p', { class: 'muted' }, t('profile.lead')),
+      h('button', { class: 'btn primary big block', type: 'button', onclick: async () => { if (await profileSheet()) render(); } }, t('profile.create'))));
+}
+
+/** Atalho do meu perfil para Amigos: ranking da semana resumido, busca e sugestões. */
+function friendsCard() {
+  const box = h('a', { class: 'card friends-card', href: '#/friends' });
+  const draw = (d) => fill(box,
+    h('div', { class: 'row' }, h('h2', { class: 'grow' }, t('tab.friends')), h('span', { class: 'link' }, `${t('friends.open')} ›`)),
+    d
+      ? (d.ranking.length > 1
+        ? h('ol', { class: 'list rank mini' }, d.ranking.slice(0, 3).map((p, i) => h('li', { class: p.me ? 'me' : '' },
+          h('div', { class: 'person-row' }, h('span', { class: `pos num top${i + 1}` }, String(i + 1)), avatar(p, 32),
+            h('strong', { class: 'grow' }, p.me ? t('rank.you') : p.name), h('span', { class: 'num xp-pill' }, `${p.weekXp} XP`)))))
+        : h('p', { class: 'muted small' }, t('friends.cta')))
+      : h('p', { class: 'muted small' }, t('friends.cta')));
+  draw(social.data);
+  if (!social.data) api(`/social?since=${encodeURIComponent(mondayIso())}`).then((x) => { social.data = x; draw(x); }, () => {});
+  return box;
+}
+
+function viewUser(handle, isTab = false) {
   const box = h('div', { class: 'stack' }, h('p', { class: 'small detect-status loading' }, t('friends.loading')));
   const draw = (u) => fill(box,
-    h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
+    !isTab && h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
     h('section', { class: 'profile-head' },
       avatar(u, 88),
       h('div', { class: 'grow' },
@@ -1369,6 +1397,7 @@ function viewUser(handle) {
         shareProfileButton(u))
       : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends')),
         h('span', { class: 'grow' }), shareProfileButton(u)),
+    u.me && friendsCard(),
 
     h('section', { class: 'card stack pinned' },
       h('h2', {}, t('pin.title')),
@@ -1634,6 +1663,8 @@ function settingsSheet() {
     h('h2', {}, t('settings.title')),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.scale')),
       seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; draw(); })),
+    h('div', {}, h('div', { class: 'small muted' }, t('settings.lang')),
+      seg([['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']], langChoice(), (v) => setLang(v))),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.theme')),
       seg([['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]], getTheme(), (v) => { setTheme(v); draw(); })),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.sound')),
@@ -1662,9 +1693,33 @@ function settingsSheet() {
       state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
       h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
     h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
+    h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
   );
   draw();
   openSheet(box);
+}
+
+/** Excluir a conta: some tudo (boulders, fotos, perfil, quem segue, links) e o login. */
+function deleteAccountSheet() {
+  const word = t('account.word');
+  const btn = h('button', { class: 'btn primary block danger-fill', type: 'button', disabled: true }, t('account.confirmBtn'));
+  const input = h('input', { type: 'text', autocapitalize: 'characters', autocomplete: 'off', oninput: (e) => (btn.disabled = e.target.value.trim().toUpperCase() !== word) });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = t('account.deleting');
+    try {
+      await api('/account', { method: 'DELETE', body: { confirm: 'DELETE' } });
+      try { Object.keys(localStorage).filter((k) => k.startsWith('cm:') || k.startsWith('bl:')).forEach((k) => localStorage.removeItem(k)); } catch {}
+      logout();
+    } catch (err) { fail(err); btn.disabled = false; btn.textContent = t('account.confirmBtn'); }
+  });
+  openSheet(h('div', { class: 'stack' },
+    h('h2', {}, t('account.title')),
+    h('p', {}, t('account.lead')),
+    h('ul', { class: 'terms' }, ['climbs', 'social', 'shares', 'login'].map((k) => h('li', {}, t(`account.${k}`)))),
+    h('label', { class: 'field' }, h('span', {}, t('account.type', { w: word })), input),
+    btn,
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
 }
 
 // ---------- roteamento ----------
@@ -1675,8 +1730,9 @@ const ROUTES = [
   [/^#\/history$/, viewHistory, 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
   [/^#\/progress$/, viewProgress, 'progress'],
-  [/^#\/friends$/, viewFriends, 'friends'],
-  [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'friends'],
+  [/^#\/me$/, viewMe, 'profile'],
+  [/^#\/friends$/, viewFriends, 'profile'],
+  [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'profile'],
 ];
 
 function render() {
