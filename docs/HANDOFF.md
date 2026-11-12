@@ -56,7 +56,14 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 
 ```
 Navegador (SPA vanilla, sem framework)
- ├─ web/src/app.js        telas, roteamento por hash, estado em memória
+ ├─ web/src/app.js        roteamento por hash e inicialização (entrada do bundle)
+ ├─ web/src/core.js       h()/svg()/fill(), tema, login (Cognito), estado e API, fotos, componentes
+ ├─ web/src/game.js       XP, nível, sequência, trilha, conquistas
+ ├─ web/src/session.js    sessão, localização, encerramento automático
+ ├─ web/src/climb.js      novo boulder (detector), detalhe, compartilhar, foto com zoom, ‹ ›
+ ├─ web/src/social.js     perfil, amigos, ranking, seguidores, Home (feed)
+ ├─ web/src/history.js    histórico e evolução
+ ├─ web/src/settings.js   ajustes, tutorial, instalar, notificações, avaliação
  ├─ detect-worker.js      YOLOv8n fp16 (ONNX, onnxruntime-web 1.31, 1 thread) → caixas
  ├─ color.js / detect.js  cor (CIELAB/LCh, desconta parede e magnésio) e agrupamento da via
  ├─ guest.js              modo sem conta (mesmas rotas da API, respondidas localmente)
@@ -76,6 +83,10 @@ NOTIFY#<hora UTC> → lembrete diário de quem está nele. ~720 execuções/mês
 Cognito (plano Essentials): pool "boulder-log", senha forte (12+), sem MFA, auth USER_PASSWORD_AUTH pela tela
 do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-mail via SES (DKIM, MAIL FROM, DMARC).
 ```
+
+### Módulos do front
+
+Cada módulo exporta o que declara e importa só o que usa. Variáveis que a inicialização troca (`guestMode`, `cfg`, os timers) só mudam por `setGuestMode`, `setCfg` e `clearTimers` em `core.js`, porque módulo ES só deixa quem declara reatribuir. `render`, `showAuth`, `needAccount` e `restoreScroll` ficam em `app.js` e são importados de volta (importação circular segura: só são chamados depois de tudo carregado).
 
 ### Dados (DynamoDB, `pk`/`sk`)
 
