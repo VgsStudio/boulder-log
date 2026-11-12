@@ -1,6 +1,6 @@
 // Entrada do CDK. Nenhum ID de conta, zona ou ARN fica no código:
 // tudo vem de variáveis de ambiente (local: .env; CI: GitHub "variables").
-import { App } from 'aws-cdk-lib';
+import { App, Tags } from 'aws-cdk-lib';
 import { BoulderStack } from './boulder-stack.ts';
 import { OidcStack } from './oidc-stack.ts';
 
@@ -8,6 +8,9 @@ const app = new App();
 // us-east-1 fixo: o certificado do CloudFront precisa estar nessa região.
 const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' };
 const e = process.env;
+
+// Tags em todos os recursos (custos por projeto no Cost Explorer; quem criou e quem responde).
+for (const [k, v] of Object.entries({ project: e.TAG_PROJECT || 'chalkmark', creator: e.TAG_CREATOR || 'vsoller', owner: e.TAG_OWNER || 'vsoller' })) Tags.of(app).add(k, v);
 
 new BoulderStack(app, 'BoulderLog-App', {
   env,
