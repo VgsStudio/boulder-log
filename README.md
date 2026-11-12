@@ -21,6 +21,7 @@ Navegador: detector YOLOv8n (ONNX) num Web Worker; modo sem conta no localStorag
 |---|---|
 | `infra/` | CDK: `boulder-stack.ts` (app inteiro), `oidc-stack.ts` (papel do GitHub Actions), `email-code.html` (e-mail do código) |
 | `services/` | `api.ts` (Lambda única da API), `ai.ts` (Bedrock), `presignup.ts` (vincula Google à conta existente), `common.ts` |
+| Estatísticas | PostHog (EU), carregado depois da abertura: `web/src/analytics.js`. Desliga em Ajustes. |
 | `web/src/` | `app.js` (inicialização), `ui/*.jsx` (telas em React: `shell`, `session`, `climb`, `photo`, `social`, `history`, `game`, `settings`, `base`), `core.js` (login, API, estado), `session.js`, `game.js`, `detect.js` + `detect-worker.js` (agarras), `color.js` (cor), `stats.js` (evolução e gamificação), `guest.js` (uso sem conta), `i18n.js` (PT/EN), `sound.js` |
 | `web/` | `index.html`, ícones, `privacidade.html`, `termos.html`, `email/banner.png`, `models/` |
 | `ml/` | export do conjunto de treino (com consentimento) e linha de base de acerto da via |

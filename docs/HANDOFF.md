@@ -230,6 +230,14 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 - seguir, ranking e perfil com amigos reais;
 - lista de seguidores/seguindo e a prévia borrada das fotos (iPhone salva a prévia em JPEG, o Safari não gera WebP).
 
+### Estado em 12/11/2026 (fim desta rodada)
+
+- Front migrado para **React 19** (telas em `web/src/ui/*.jsx`), validado por teste de fumaça em todas as telas, sem conta e no fluxo da foto. Publicado.
+- PostHog no ar (EU). Ver eventos no painel `eu.posthog.com`. Falta: criar o agente do Claude com o MCP do PostHog (chave pessoal adicionada por você com `claude mcp add`) e um relatório semanal com `/schedule`.
+- Som só ao registrar boulder (trombeta).
+- Ideias anotadas: **perfil verificado pago** (Stripe, valor simbólico, para testar interesse); **modo Rocha** (marcar agarras à mão, sem detector); app nativo (Expo) se houver tração; marca "Chalkmark" pode conflitar com o produto da Optimal Workshop (pesquisar no INPI antes de investir); `chalkmark.com.br` está livre (~R$ 40/ano).
+- Testar no celular: fotos depois de muito tempo com o app aberto (agora renovam sozinhas), arrastar janelas para fechar, zoom e pincel na versão React.
+
 ### Combinado e ainda não feito
 
 - ~~Testar notificações num iPhone real~~: **funcionou** (12/11: chegou "👋 Jeniffer começou a te seguir"). Falta ver o lembrete diário chegar.
