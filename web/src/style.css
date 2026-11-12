@@ -582,8 +582,11 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .auth-info { background: var(--blue-soft); color: var(--text); padding: 10px 14px; border-radius: 14px; margin: 0; }
 .auth .auth-error { color: var(--pink-deep); font-weight: 800; margin: 0; }
 .auth .auth-info { color: var(--text); }
-.pw { display: flex; align-items: center; gap: 8px; }
-.pw input { flex: 1; }
+.pw { position: relative; }
+.pw input { width: 100%; padding-right: 48px; }
+.pw-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 10px; }
+.pw-eye svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pw-eye[aria-pressed="true"] { color: var(--blue); }
 .auth-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; }
 .auth-or::before, .auth-or::after { content: ""; flex: 1; height: 2px; background: var(--line); }
 .google-btn { gap: 10px; }

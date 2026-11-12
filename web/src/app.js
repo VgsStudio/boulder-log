@@ -1972,6 +1972,11 @@ function render() {
   document.querySelectorAll('#tabbar a').forEach((a) => (a.dataset.tab === tab ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
 }
 
+/** Olho aberto (senha escondida, toque para mostrar) ou riscado (senha à mostra). */
+const eyeIcon = (open) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+  svg('path', { d: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z' }), svg('circle', { cx: 12, cy: 12, r: 3 }),
+  open && svg('path', { d: 'M4 4l16 16' }));
+
 const GOOGLE_G = [['#4285F4', 'M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z'],
   ['#34A853', 'M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z'],
   ['#FBBC05', 'M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14Z'],
@@ -2090,7 +2095,17 @@ function showAuth({ mode = 'login', blocked = false } = {}) {
   const pw = (label, autocomplete) => h('label', { class: 'field' }, h('span', {}, label),
     h('div', { class: 'pw' },
       h('input', { type: 'password', required: true, autocomplete, value: f.password, oninput: (e) => (f.password = e.target.value) }),
-      h('button', { class: 'link small', type: 'button', onclick: (e) => { const i = e.currentTarget.previousSibling; i.type = i.type === 'password' ? 'text' : 'password'; e.currentTarget.textContent = i.type === 'password' ? t('auth.show') : t('auth.hide'); } }, t('auth.show'))),
+      // Olho dentro do campo: mostra/esconde a senha.
+      h('button', {
+        class: 'pw-eye', type: 'button', 'aria-label': t('auth.show'), 'aria-pressed': 'false',
+        onclick: (e) => {
+          const b = e.currentTarget, i = b.previousSibling, show = i.type === 'password';
+          i.type = show ? 'text' : 'password';
+          b.setAttribute('aria-pressed', String(show));
+          b.setAttribute('aria-label', show ? t('auth.hide') : t('auth.show'));
+          b.replaceChildren(eyeIcon(show));
+        },
+      }, eyeIcon(false))),
     autocomplete === 'new-password' && h('span', { class: 'small muted' }, t('auth.pwRule')));
   const email = () => field('email', t('auth.email'), { type: 'email', required: true, autocomplete: 'username', inputmode: 'email', autocapitalize: 'none' });
   const code = () => field('code', t('auth.code'), { type: 'text', required: true, inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 8 });
