@@ -1,4 +1,5 @@
 // Ajustes, tutorial, instalar na tela inicial, notificações e avaliação, em React.
+import { track, statsOn, setStats } from '../analytics.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, lang, langChoice, setLang, t } from '../i18n.js';
 import { playResult, setSound, soundOn } from '../sound.js';
@@ -55,6 +56,7 @@ function Settings() {
         </label>
         <Field label={t('settings.lang')}><Seg options={[['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']]} value={langChoice()} onPick={(v) => setLang(v)} /></Field>
         <Field label={t('settings.theme')}><Seg options={[['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]]} value={getTheme()} onPick={(v) => { setTheme(v); redraw((n) => n + 1); }} /></Field>
+        <Field label={t('settings.stats')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={statsOn() ? 'on' : 'off'} onPick={(v) => { setStats(v === 'on'); redraw((n) => n + 1); }} /></Field>
         <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playResult('sent'); redraw((n) => n + 1); }} /></Field>
       </section>
 
@@ -165,6 +167,7 @@ export function maybeAskInstall() {
   if (!canInstall() || $('#sheet').open || tourRunning) return false;
   if (Date.now() - Number(localStorage.getItem('cm:installAsk') || 0) < 7 * 86400_000) return false;
   try { localStorage.setItem('cm:installAsk', String(Date.now())); } catch {}
+  track('install_prompt_shown', { ios: isIOS() });
   installSheet();
   return true;
 }
@@ -232,6 +235,7 @@ function PushAsk() {
     try {
       const p = await enablePush();
       closeSheet();
+      track(p ? 'push_enabled' : 'push_blocked');
       if (p) { toast(t('push.on', { h: `${p.effectiveHour}h` })); } else toast(t('push.blocked'));
     } catch (err) { fail(err); setBusy(false); }
   };
@@ -314,6 +318,7 @@ function Feedback({ auto, rated }) {
     setBusy(true);
     try {
       await api('/feedback', { method: 'POST', body: { stars, comment: comment.trim(), lang } });
+      track('feedback_sent', { stars });
       fbLater(60);
       closeSheet();
       toast(t('fb.thanks'));

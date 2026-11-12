@@ -1,4 +1,5 @@
 // Social em React: perfil (meu e de outros), amigos, ranking, seguidores, Home (feed).
+import { track } from '../analytics.js';
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate, lang, t } from '../i18n.js';
 import { SWATCH } from '../color.js';
@@ -63,6 +64,7 @@ function ProfileForm({ welcome, done }) {
       const res = await api('/profile', { method: 'PUT', body: { name, handle, ...(blob ? { avatarType: blob.type } : {}) } });
       if (res.upload) { await upload(res.upload, blob); res.avatarUrl = URL.createObjectURL(blob); }
       delete res.upload;
+      track(cur ? 'profile_edited' : 'profile_created');
       state.profile = res;
       done(res);
     } catch (err) {
@@ -117,6 +119,7 @@ export async function toggleFollow(p) {
   if (!(await needProfile())) return false;
   const on = !p.following;
   p.following = on;
+  track(on ? 'follow' : 'unfollow');
   try { Object.assign(p, await api(`/users/${p.handle}/follow`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { p.following = !on; fail(err); }
   return true;
 }
@@ -409,6 +412,7 @@ export function TryButton({ u, c }) {
     setBusy(true);
     try {
       const climb = await api(`/users/${u.handle}/climbs/${c.id}/copy`, { method: 'POST' });
+      track('friend_climb_copied');
       state.climbs.push(climb);
       toast(t('share.added'));
       if ($('#sheet').open) closeSheet();
@@ -478,6 +482,7 @@ function FireButton({ c }) {
   const click = async () => {
     const on = !c.fired;
     Object.assign(c, { fired: on, fire: c.fire + (on ? 1 : -1) });
+    track(on ? 'fire' : 'unfire');
     redraw((n) => n + 1);
       try { Object.assign(c, await api(`/feed/${c.owner.handle}/${c.id}/fire`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { fail(err); }
     redraw((n) => n + 1);

@@ -1,4 +1,5 @@
 // Chalkmark: app em React. Este arquivo inicia tudo: configuração, login, dados e a casca (ui/shell.jsx).
+import { startAnalytics } from './analytics.js';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -7,7 +8,7 @@ import { clearGuest, getPhoto, guestLocked, guestPending, startGuest } from './g
 import { PHOTO_TERMS_VERSION, cfg, state, toast, fail, idToken, guestMode, api, loadAll, loadSnapshot, upload, setCfg, setGuestMode, debounce } from './core.js';
 import { checkAutoEnd, sheetSwipe } from './session.js';
 import { backfillPreviews } from './ui/climb.jsx';
-import { profileSheet } from './ui/social.jsx';
+import { profileSheet, claims } from './ui/social.jsx';
 import { tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './ui/settings.jsx';
 import { App, shell, setShell, restoreScroll, needAccount, showAuth } from './ui/shell.jsx';
 
@@ -93,6 +94,7 @@ async function boot() {
     checkAutoEnd();
   });
   setShell({ ready: true });
+  startAnalytics({ userId: guestMode ? null : claims().sub, guest: guestMode }).catch((e) => console.warn('stats', e));
   checkAutoEnd();
   // Primeira vez (sem perfil): boas-vindas com nome e @ já sugeridos; "agora não" pergunta de novo amanhã.
   try {

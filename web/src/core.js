@@ -1,4 +1,5 @@
 // Base (sem tela): tema, login/Cognito, estado e API, fotos, utilidades.
+import { trackError } from './analytics.js';
 import { needAccount, showAuth } from './app.js';
 import { fmtDate, lang, t } from './i18n.js';
 import { guestApi, putPhoto } from './guest.js';
@@ -62,6 +63,7 @@ export function toast(msg) {
 export const fail = (e) => {
   if (e?.code === 'NEED_ACCOUNT') { needAccount(); return; }
   console.error(e);
+  trackError(e);
   toast(e?.code === 'AI_DAILY_LIMIT' ? t('ai.limit') : e?.code === 'AI_UNAVAILABLE' || e?.code === 'AI_FAILED' ? t('ai.unavailable') : navigator.onLine ? t('error.generic') : t('error.offline'));
 };
 

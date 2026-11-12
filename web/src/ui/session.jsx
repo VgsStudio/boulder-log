@@ -1,4 +1,5 @@
 // Tela da sessão em React: começar (escolher ginásio) e sessão aberta (registrar, encerrar).
+import { track } from '../analytics.js';
 import { useEffect, useRef, useState } from 'react';
 import { fmtDuration, t } from '../i18n.js';
 import * as S from '../stats.js';
@@ -50,6 +51,7 @@ function StartSession() {
       }
       localStorage.setItem('bl:gym', id);
       state.sessions.push(await api('/sessions', { method: 'POST', body: { gymId: id } }));
+      track('session_started', { new_gym: gymId === '__new', detected: detected });
       render();
     } catch (err) { fail(err); setBusy(false); }
   };
@@ -125,6 +127,7 @@ function EndSession({ s }) {
   const save = () => {
     setBusy(true);
     const body = { end: true, feeling, ...(note.trim() ? { note: note.trim() } : {}) };
+    track('session_ended', { feeling, climbs: state.climbs.filter((c) => c.sessionId === s.id).length, minutes: Math.round((Date.now() - Date.parse(s.startedAt)) / 60000) });
     const prev = { ...s };
     upsert(state.sessions, { id: s.id, endedAt: new Date().toISOString(), feeling, ...(body.note ? { note: body.note } : {}) });
     $('#sheet').close();

@@ -1,4 +1,5 @@
 // Boulder em React: novo boulder (foto + detector), detalhe, projeto, compartilhar e link recebido.
+import { track } from '../analytics.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, t } from '../i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest } from '../color.js';
@@ -105,6 +106,7 @@ function QuickLog({ s }) {
     const lvBefore = S.level(S.totalXp(state.climbs)).level;
     try {
       const { climb } = await api('/climbs', { method: 'POST', body: { sessionId: s.id, color, grade: g, attempts: 1, result } });
+      track('climb_logged', { result, grade: g, color, photo: false, quick: true });
       state.climbs.push(climb);
       closeSheet();
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
@@ -189,18 +191,20 @@ function NewClimbForm({ s }) {
     try {
       const canvas = await toCanvas(file, 1568);
       d.preparing = false;
-      Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading', zoom: { k: 1, x: 0, y: 0 } });
+      Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading', zoom: { k: 1, x: 0, y: 0 }, t0: performance.now() });
       d.rgba = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data;
       draw();
       // Detecta as agarras em segundo plano enquanto você preenche o resto.
       detectHolds(canvas, palette).then((boxes) => {
         if (d.canvas !== canvas) return;
         Object.assign(d, { boxes, detect: 'done' });
+        track('holds_detected', { boxes: boxes.length, ms: Math.round(performance.now() - d.t0) });
         if (d.tap) applyTap(d.tap.x, d.tap.y);
         draw();
         setTimeout(() => runTour('cm:tourPhoto', [{ el: 'main .stage', text: t('tour.photo') }]), 300);
       }, (err) => {
         console.error(err);
+        track('holds_detect_failed', { message: String(err?.message ?? err).slice(0, 120) });
         if (d.canvas === canvas) { d.detect = 'failed'; draw(); }
       });
     } catch (err) { d.preparing = false; draw(); fail(err); }
@@ -296,6 +300,13 @@ function NewClimbForm({ s }) {
       const lvBefore = S.level(S.totalXp(state.climbs)).level;
       const { climb, uploads } = await api('/climbs', { method: 'POST', body });
       if (uploads) climb.thumbUrl = URL.createObjectURL(thumb); // mostra a foto local já
+      track('climb_logged', {
+        result: d.result, grade: d.grade, color: d.color, photo: !!d.canvas, project: !!d.projectId, boxes: d.boxes?.length ?? 0,
+        holds: d.route?.length ?? 0, auto_holds: d.autoRoute?.length ?? 0,
+        // Quanto a pessoa corrigiu a via sugerida: medida de acerto do detector.
+        holds_added: d.route && d.autoRoute ? d.route.filter((b) => !d.autoRoute.includes(b)).length : 0,
+        holds_removed: d.route && d.autoRoute ? d.autoRoute.filter((b) => !d.route.includes(b)).length : 0,
+      });
       state.climbs.push(climb);
       const unlocked = S.newAchievements(before, S.achievements(state.sessions, state.climbs));
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
@@ -467,6 +478,7 @@ export function ClimbView({ id }) {
     const s = activeSession();
     if (!s) { toast(t('project.needSession')); return; }
     const body = { sessionId: s.id, color: r.color, grade: r.grade, attempts: 1, result, projectId: r.id };
+    track('project_try', { result, grade: r.grade });
     const before = S.achievements(state.sessions, state.climbs);
     const lvBefore = S.level(S.totalXp(state.climbs)).level;
     // Registro provisório para a tela reagir já; troca pelo do servidor quando ele responder.
@@ -542,6 +554,7 @@ export function ClimbView({ id }) {
     const cands = e.boxes?.length ? { cands: e.boxes.slice(0, 300).map(boxOut), detector: DETECTOR_ID } : {};
     try {
       upsert(state.climbs, await api(`/climbs/${r.id}`, { method: 'PATCH', body: { holds, ...cands } }));
+      track('holds_edited', { holds: holds.length });
       he.current = null;
       toast(t('holds.saved'));
     } catch (err) { fail(err); }
@@ -685,6 +698,7 @@ export async function shareClimb(c, btn) {
   btn.disabled = true;
   try {
     const { token } = await api(`/climbs/${c.id}/share`, { method: 'POST' });
+    track('share_created');
     const url = `${location.origin}/#/s/${token}`;
     const gym = gymOf(state.sessions.find((s) => s.id === c.sessionId)?.gymId)?.name ?? c.gymName;
     // "essa via vermelha V3" (cor "outra" fica só "essa via V3")
@@ -731,6 +745,7 @@ export function ShareView({ token }) {
     setBusy(true);
     try {
       const climb = await api(`/shares/${token}/accept`, { method: 'POST' });
+      track('share_accepted');
       state.climbs.push(climb);
         toast(t('share.added'));
       location.replace(`#/climb/${climb.id}`);

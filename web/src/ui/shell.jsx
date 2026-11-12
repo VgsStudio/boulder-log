@@ -1,4 +1,5 @@
 // Casca do app em React: topo, barra de abas, rotas por hash e a tela de login.
+import { track, pageview } from '../analytics.js';
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { t } from '../i18n.js';
 import * as S from '../stats.js';
@@ -21,22 +22,22 @@ const useShell = () => { useSyncExternalStore(subscribe, getVersion); return she
 
 // ---------- rotas ----------
 const ROUTES = [
-  [/^#?\/?$/, () => <Session />, 'session'],
-  [/^#\/new$/, () => <NewClimb />, 'session'],
-  [/^#\/climb\/([a-z0-9]{19})$/, (id) => <ClimbView id={id} />, null],
-  [/^#\/history$/, () => <History />, 'history'],
-  [/^#\/s\/([A-Za-z0-9_-]{22})$/, (token) => <ShareView token={token} />, null],
-  [/^#\/progress$/, () => <Progress />, 'profile'],
-  [/^#\/feed$/, () => <Feed />, 'feed'],
-  [/^#\/me$/, () => <Me />, 'profile'],
-  [/^#\/friends$/, () => <Friends />, 'profile'],
-  [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => <User handle={handle} />, 'profile'],
+  [/^#?\/?$/, () => <Session />, 'session', 'session'],
+  [/^#\/new$/, () => <NewClimb />, 'session', 'new_climb'],
+  [/^#\/climb\/([a-z0-9]{19})$/, (id) => <ClimbView id={id} />, null, 'climb'],
+  [/^#\/history$/, () => <History />, 'history', 'history'],
+  [/^#\/s\/([A-Za-z0-9_-]{22})$/, (token) => <ShareView token={token} />, null, 'shared_climb'],
+  [/^#\/progress$/, () => <Progress />, 'profile', 'progress'],
+  [/^#\/feed$/, () => <Feed />, 'feed', 'home'],
+  [/^#\/me$/, () => <Me />, 'profile', 'my_profile'],
+  [/^#\/friends$/, () => <Friends />, 'profile', 'friends'],
+  [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => <User handle={handle} />, 'profile', 'user_profile'],
 ];
 /** Abre na Home; com sessão aberta (ou sem conta), na Sessão. */
 const currentHash = () => location.hash || (guestMode || state.sessions.some((s) => !s.endedAt) ? '#/' : '#/feed');
 export const routeOf = (hash) => {
-  const [re, fn, tab] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
-  return { el: fn(...(hash.match(re)?.slice(1) ?? [])), tab };
+  const [re, fn, tab, name] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
+  return { el: fn(...(hash.match(re)?.slice(1) ?? [])), tab, name };
 };
 
 // Rolagem: a posição fica guardada na própria entrada do histórico (history.state), então "voltar"
@@ -61,6 +62,7 @@ export function App() {
     window.scrollTo(0, wantScroll);
   }, [key]);
   useEffect(() => { document.body.classList.toggle('offline', sh.offline); }, [sh.offline]);
+  useEffect(() => { if (sh.ready && !sh.auth) pageview(route.name); }, [currentHash(), sh.ready, sh.auth]); // eslint-disable-line react-hooks/exhaustive-deps
   const showChrome = sh.ready && !sh.auth;
   return (
     <>
@@ -121,6 +123,7 @@ export function needAccount() {
   const close = () => $('#sheet').close();
   if (guestNags() < 1) {
     bumpNags();
+    track('guest_prompt');
     openSheet(
       <div className="stack">
         <h2>{t('guest.title')}</h2>
@@ -133,6 +136,7 @@ export function needAccount() {
     return;
   }
   bumpNags();
+  track('guest_blocked');
   if ($('#sheet').open) close();
   showAuth({ mode: 'signup', blocked: true });
 }
@@ -186,6 +190,7 @@ function AuthScreen({ mode: startMode, blocked }) {
   const mail = () => email.trim().toLowerCase();
   const signedIn = (r) => {
     saveTokens(fromAuthResult(r.AuthenticationResult));
+    track(mode === 'signup' || mode === 'confirm' ? 'auth_signup' : 'auth_login', { method: 'email' });
     let after = '';
     try { after = sessionStorage.getItem('cm:after') || ''; sessionStorage.removeItem('cm:after'); } catch {}
     location.replace(`/${after}`);
@@ -255,7 +260,7 @@ function AuthScreen({ mode: startMode, blocked }) {
       {!entry && <button className="link small" type="button" onClick={() => go('login')}>‹ {t('back')}</button>}
       {cfg.google && entry && <>
         <div className="auth-or"><span>{t('auth.or')}</span></div>
-        <button className="btn block google-btn" type="button" onClick={() => login('oauth2/authorize', { identity_provider: 'Google' })}>
+        <button className="btn block google-btn" type="button" onClick={() => { track('auth_google_click'); login('oauth2/authorize', { identity_provider: 'Google' }); }}>
           <svg viewBox="0 0 24 24" aria-hidden="true">{GOOGLE_G.map(([c, d]) => <path key={c} d={d} fill={c} />)}</svg>{t('auth.google')}
         </button>
       </>}

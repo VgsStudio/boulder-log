@@ -293,7 +293,8 @@ export class BoulderStack extends Stack {
       "worker-src 'self' blob:",
       "style-src 'self'",
       `img-src 'self' blob: data: ${s3Hosts}`,
-      `connect-src 'self' ${s3Hosts} ${cognitoDomain} https://cognito-idp.${this.region}.amazonaws.com`,
+      // PostHog (estatísticas de uso, região EU).
+      `connect-src 'self' ${s3Hosts} ${cognitoDomain} https://cognito-idp.${this.region}.amazonaws.com https://eu.i.posthog.com https://eu-assets.i.posthog.com`,
       "manifest-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'none'",

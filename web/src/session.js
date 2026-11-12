@@ -1,4 +1,5 @@
 // Sessão (sem tela): localização, encerramento automático e a janela que sobe de baixo.
+import { track } from './analytics.js';
 import { isReact, mount, sweep } from './ui/base.jsx';
 import { render } from './app.js';
 import { t } from './i18n.js';
@@ -44,6 +45,7 @@ export async function autoEnd(s, reason, endedAt) {
   try {
     upsert(state.sessions, await api(`/sessions/${s.id}`, { method: 'PATCH', body: { end: true, endedAt, auto: reason } }));
     toast(t(reason === 'left' ? 'session.autoLeft' : 'session.autoIdle'));
+    track('session_auto_ended', { reason });
   } catch (err) { upsert(state.sessions, { ...prev, endedAt: undefined, autoEnded: undefined }); render(); fail(err); }
 }
 

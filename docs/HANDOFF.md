@@ -98,6 +98,15 @@ do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-
 - **Fotos com link vencido** (os links assinados valem 1 h): se uma imagem falha, `refreshPhotos()` busca os dados de novo e redesenha (no máximo 1x por minuto).
 - **Teste de fumaça** (fora do repo): um servidor falso + Chrome sem tela passando por todas as telas, sem conta e pelo fluxo da foto (detector, toque, toque longo, pinça, pincel, salvar, editar agarras, compartilhar). Foi o que validou a migração.
 
+### Estatísticas (PostHog, região EU)
+
+- `web/src/analytics.js`: carrega o PostHog **depois** que o app abre (pedaço separado do bundle, com gravação e erros inclusos, sem scripts de fora). Não roda em `localhost`.
+- Identifica pelo `sub` do Cognito (nunca e-mail). Sem conta = anônimo. Propriedades: `guest`, `installed`, `app_lang`.
+- Gravação de sessões com campos mascarados, sem fotos (`img, canvas, .avatar` bloqueados) e com nomes de outras pessoas escondidos. Mapa de calor e erros automáticos; `fail()` também manda o erro.
+- Visitas: `$pageview` com `screen` (`home`, `session`, `new_climb`, `climb`, `history`, `progress`, `my_profile`, `user_profile`, `friends`, `shared_climb`).
+- Eventos: `climb_logged` (resultado, grau, foto, agarras sugeridas × corrigidas: `holds_added`/`holds_removed` medem o acerto do detector), `holds_detected` (quantas e em quantos ms), `holds_detect_failed`, `holds_edited`, `project_try`, `session_started`/`session_ended`/`session_auto_ended`, `follow`/`unfollow`, `fire`, `share_created`/`share_accepted`, `friend_climb_copied`, `profile_created`, `push_enabled`/`push_blocked`, `install_prompt_shown`, `feedback_sent`, `guest_prompt`/`guest_blocked`, `auth_login`/`auth_signup`/`auth_google_click`.
+- Ajustes → "Estatísticas de uso" desliga (fica em `cm:noStats`). Política de privacidade atualizada. CSP: `connect-src` inclui `eu.i.posthog.com` e `eu-assets.i.posthog.com`.
+
 ### Dados (DynamoDB, `pk`/`sk`)
 
 | pk | sk | O quê |
