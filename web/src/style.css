@@ -539,9 +539,7 @@ input, select, textarea { font-size: max(16px, 1em); }
 .icon-btn svg.gear { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 button.streak-pill { border: 0; cursor: pointer; font: inherit; font-family: var(--display); font-weight: 900; }
 .line-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.pin-btn { margin: 0; color: var(--muted); }
-.pin-btn[aria-pressed="true"] { color: var(--blue); }
-.pin-btn[aria-pressed="true"] .line-ico { fill: var(--blue-soft); }
+
 .share-btn { gap: 8px; }
 .share-btn .line-ico { width: 20px; height: 20px; }
 
@@ -617,5 +615,15 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 @keyframes scan { to { top: 100%; } }
 @media (prefers-reduced-motion: reduce) { .stage.detecting::after { animation: none; display: none; } }
 .pinned-head { width: 100%; border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; gap: 8px; } .pinned .stage { cursor: pointer; }
-.share-icon { margin: 0; color: var(--muted); }
+
 .icon-btn .line-ico { fill: none; stroke: currentColor; }
+
+/* Título do boulder: nome encolhe antes de encostar nos ícones; ações iguais (mesma cor e tamanho) */
+.title-row { gap: 8px; flex-wrap: nowrap; }
+.title-main { min-width: 0; gap: 8px; }
+.title-main .title-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.title-main .grade-pill { flex: none; }
+.title-actions { display: flex; gap: 2px; flex: none; }
+.act-btn { margin: 0; width: 40px; height: 40px; color: var(--blue); }
+.act-btn .line-ico { width: 22px; height: 22px; }
+.act-btn[aria-pressed="true"] .line-ico { fill: var(--blue-soft); }

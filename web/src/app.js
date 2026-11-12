@@ -291,6 +291,8 @@ const HOLD_SHAPES = [
   'M58 10c16 4 30 20 30 38s-14 34-32 40-38-2-46-18-4-36 10-48 22-16 38-12Z',
 ];
 const PIN_ICON = 'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z';
+const PENCIL_ICON = 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4';
+const CHECK_ICON = 'M5 12.5l4.5 4.5L19 7.5';
 const SHARE_ICON = 'M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6';
 /** Ícone de traço (pin, compartilhar), na cor do texto. */
 const lineIcon = (d) => svg('svg', { class: 'line-ico', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d }));
@@ -1062,13 +1064,15 @@ function viewClimb(id) {
           h('span', { class: 'small muted num' }, `${ni + 1}/${navList.length}`),
           h('button', { class: 'icon-btn', type: 'button', disabled: ni >= navList.length - 1, 'aria-label': t('nav.next'), onclick: () => goNav(1) }, '›'))),
       h('div', { class: 'row title-row' },
-        h('h1', { class: 'row grow' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
-        h('button', {
-          class: 'icon-btn pin-btn', type: 'button', onclick: () => pinClimb(r),
-          'aria-pressed': String(state.profile?.pinned === r.id), 'aria-label': state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add'),
-        }, lineIcon(PIN_ICON)),
-        h('button', { class: 'icon-btn share-icon', type: 'button', 'aria-label': t('share.button'), onclick: (e) => shareClimb(r, e.currentTarget) }, lineIcon(SHARE_ICON)),
-        h('button', { class: 'link', type: 'button', onclick: () => { editing = !editing; draw(); } }, editing ? t('climb.done') : t('climb.edit'))),
+        h('h1', { class: 'row grow title-main' }, swatch(cur.color), h('span', { class: 'title-name' }, colorName(cur.color)), h('span', { class: 'grade-pill' }, grade(cur.grade))),
+        // Ações do boulder: mesma cor e tamanho; o alfinete fica preenchido quando fixado, o lápis quando editando.
+        h('div', { class: 'title-actions' },
+          h('button', {
+            class: 'icon-btn act-btn', type: 'button', onclick: () => pinClimb(r),
+            'aria-pressed': String(state.profile?.pinned === r.id), 'aria-label': state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add'),
+          }, lineIcon(PIN_ICON)),
+          h('button', { class: 'icon-btn act-btn', type: 'button', 'aria-label': t('share.button'), onclick: (e) => shareClimb(r, e.currentTarget) }, lineIcon(SHARE_ICON)),
+          h('button', { class: 'icon-btn act-btn', type: 'button', 'aria-pressed': String(editing), 'aria-label': editing ? t('climb.done') : t('climb.edit'), onclick: () => { editing = !editing; draw(); } }, lineIcon(editing ? CHECK_ICON : PENCIL_ICON)))),
       // Edição de cor e grau (num projeto, as tentativas seguintes usam a cor/grau da raiz).
       editing && h('section', { class: 'card stack' },
         h('div', {}, h('h2', {}, t('climb.color')),
