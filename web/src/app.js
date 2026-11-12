@@ -656,8 +656,37 @@ function endSessionSheet(s) {
 
 function openSheet(content) {
   const d = $('#sheet');
+  d.style.transform = '';
   d.replaceChildren(content);
   d.showModal();
+}
+
+/** Janela de baixo: arrastar para baixo (com ela no topo da rolagem) fecha. Fora de fotos, campos e listas roláveis. */
+function sheetSwipe(d) {
+  let y0 = null, dy = 0, t0 = 0;
+  d.addEventListener('touchstart', (e) => {
+    const el = e.target;
+    if (e.touches.length > 1 || d.scrollTop > 0 || el.closest('.stage, input, select, textarea')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; t0 = Date.now();
+  }, { passive: true });
+  d.addEventListener('touchmove', (e) => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0) { d.style.transform = ''; return; }
+    e.preventDefault(); // não rola a página por trás enquanto arrasta
+    d.style.transition = 'none';
+    d.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
+  d.addEventListener('touchend', () => {
+    if (y0 == null) return;
+    y0 = null;
+    const fast = dy > 40 && dy / (Date.now() - t0) > 0.6;
+    d.style.transition = 'transform .2s ease-out';
+    if (dy > Math.min(140, d.offsetHeight / 4) || fast) {
+      d.style.transform = `translateY(${d.offsetHeight}px)`;
+      setTimeout(() => { d.close(); d.style.transition = ''; d.style.transform = ''; }, 180);
+    } else d.style.transform = '';
+  });
 }
 
 // ---------- termo de uso das fotos ----------
@@ -1327,6 +1356,11 @@ function viewShare(token) {
       sh.ai && h('div', { class: 'chips' },
         sh.ai.wallAngle && h('span', { class: 'chip' }, t(`angle.${sh.ai.wallAngle}`)),
         (sh.ai.holdTypes ?? []).map((x) => h('span', { class: 'chip' }, t(`hold.${x}`)))),
+      isIOS() && !standalone() && h('section', { class: 'card stack small' },
+        h('strong', {}, t('deeplink.iosTitle')), h('p', { class: 'muted' }, t('deeplink.iosLead')),
+        h('button', { class: 'btn block', type: 'button', onclick: async (e) => {
+          try { await navigator.clipboard.writeText(location.href); e.target.textContent = t('share.copied'); } catch { toast(location.href); }
+        } }, t('share.copy'))),
       sh.mine
         ? h('p', { class: 'muted' }, t('share.mine'))
         : h('button', { class: 'btn go big block', type: 'button', onclick: add }, t('share.add')));
@@ -1669,7 +1703,11 @@ function viewFriends() {
           h('button', { class: 'btn primary big block', type: 'button', onclick: async () => { if (await profileSheet()) { social.data = null; render(); } } }, t('profile.create'))),
 
       h('label', { class: 'field' }, h('span', {}, t('friends.search')),
-        h('input', { type: 'search', value: social.q, placeholder: t('friends.searchHint'), autocapitalize: 'none', oninput: (e) => { social.q = e.target.value.trim(); search(social.q); } })),
+        h('input', { type: 'search', value: social.q, placeholder: t('friends.searchHint'), autocapitalize: 'none', oninput: (e) => {
+          const link = e.target.value.match(/(?:chalkmark|boulder)\.vsoller\.com\.br\/?(#\/(?:s|u)\/[A-Za-z0-9_.-]+)/);
+          if (link) { e.target.value = ''; social.q = ''; location.hash = link[1]; return; }
+          social.q = e.target.value.trim(); search(social.q);
+        } })),
       social.results && (social.results.length
         ? h('ul', { class: 'list card' }, social.results.map((p) => person(p)))
         : h('p', { class: 'muted small' }, t('friends.none'))),
@@ -2186,7 +2224,8 @@ function settingsSheet() {
       guestMode
         ? [h('button', { class: 'btn primary block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'signup' }); } }, t('auth.signup')),
           h('button', { class: 'btn block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'login' }); } }, t('guest.haveAccount'))]
-        : [h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
+        : [canInstall() && h('button', { class: 'btn primary block', type: 'button', onclick: installSheet }, t('install.button')),
+          h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
           h('button', { class: 'btn block', type: 'button', onclick: logout }, t('settings.logout'))],
       h('p', { class: 'small legal-links' },
         h('button', { class: 'link small', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
@@ -2270,11 +2309,16 @@ const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 let installEvent = null; // Android/Chrome: o navegador entrega um "prompt" de instalação
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; });
 /** Convite para instalar (uma vez por semana, até instalar). Devolve true se mostrou. */
+const isAndroid = () => /Android/.test(navigator.userAgent);
+const canInstall = () => !standalone() && (isIOS() || isAndroid() || !!installEvent);
 function maybeAskInstall() {
-  if (standalone() || $('#sheet').open || tourRunning) return false;
-  if (!isIOS() && !installEvent) return false;
+  if (!canInstall() || $('#sheet').open || tourRunning) return false;
   if (Date.now() - Number(localStorage.getItem('cm:installAsk') || 0) < 7 * 86400_000) return false;
   try { localStorage.setItem('cm:installAsk', String(Date.now())); } catch {}
+  installSheet();
+  return true;
+}
+function installSheet() {
   openSheet(h('div', { class: 'stack' },
     h('img', { class: 'auth-logo', src: '/icon.svg', alt: '', width: 72, height: 72 }),
     h('h2', {}, t('install.title')),
@@ -2284,12 +2328,13 @@ function maybeAskInstall() {
         h('li', {}, t('install.ios1'), ' ', h('span', { class: 'ios-share', 'aria-hidden': 'true' }, lineIcon(SHARE_ICON))),
         h('li', {}, t('install.ios2')),
         h('li', {}, t('install.ios3')))
-      : h('button', {
-        class: 'btn primary big block', type: 'button',
-        onclick: async () => { $('#sheet').close(); installEvent?.prompt(); installEvent = null; },
-      }, t('install.button')),
+      : installEvent
+        ? h('button', {
+          class: 'btn primary big block', type: 'button',
+          onclick: async () => { $('#sheet').close(); installEvent?.prompt(); installEvent = null; },
+        }, t('install.button'))
+        : h('ol', { class: 'install-steps' }, h('li', {}, t('install.android1')), h('li', {}, t('install.android2'))),
     h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow'))));
-  return true;
 }
 
 // ---------- notificações (Web Push) ----------
@@ -2660,6 +2705,7 @@ async function boot() {
   $('#tab-cam').setAttribute('aria-label', t('cam.label'));
   $('#cam-input').addEventListener('change', (e) => { const f = e.target.files?.[0]; e.target.value = ''; onCameraPhoto(f); });
   $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  sheetSwipe($('#sheet'));
   // Service worker: abre sem sinal e recebe notificações.
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('sw', e));
   try { cfg = await (await fetch('/config.json', { cache: 'no-store' })).json(); } catch { cfg = JSON.parse(localStorage.getItem('cm:cfg') || '{}'); }

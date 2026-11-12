@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Chalkmark",
   "short_name": "Chalkmark",
   "start_url": "/",
@@ -22,5 +23,13 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "scope": "/",
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
+  "handle_links": "preferred"
 }
