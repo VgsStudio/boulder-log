@@ -842,11 +842,11 @@ function viewNew() {
         ? (project.thumbUrl && h('img', { class: 'thumb', src: project.thumbUrl, alt: '', style: { width: '96px', height: '96px' } }))
         : d.canvas
           ? h('section', {},
-            stage([d.canvas,
+            scanning(d.detect === 'loading', stage([d.canvas,
               holdsOverlay(d.route, d.boxes),
               // A bolinha do toque só enquanto não há via marcada (depois as caixas mostram tudo).
               d.tap && !d.route?.length && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap, d.zoom,
-              (x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } }),
+              (x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } })),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
@@ -949,7 +949,11 @@ function viewClimb(id) {
     draw();
   };
   /** Nova tentativa de um projeto (mandou ou ainda não), ligada à raiz, na sessão ativa. */
+  let lastTry = 0;
   const logTry = async (rootClimb, result, btn) => {
+    // Toques repetidos em sequência criavam vários registros: ignora por 1,5 s depois de registrar.
+    if (Date.now() - lastTry < 1500) return;
+    lastTry = Date.now();
     const s = activeSession();
     if (!s) { toast(t('project.needSession')); return; }
     btn.disabled = true;
@@ -1076,8 +1080,8 @@ function viewClimb(id) {
       r.photoType && (holdEdit
         ? h('section', { class: 'stack' },
           holdEdit.canvas
-            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom,
-              (x, y) => { if (cycleRole(holdEdit.holds, x, y)) { playTick(); draw(); } })
+            ? scanning(holdEdit.status === 'loading', stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom,
+              (x, y) => { if (cycleRole(holdEdit.holds, x, y)) { playTick(); draw(); } }))
             : null,
           h('p', { class: `small detect-status ${holdEdit.status}` },
             holdEdit.status === 'loading' ? t('detect.loading') : holdEdit.status === 'failed' ? t('detect.failed') : t('holds.hint', { n: holdEdit.holds.length })),
@@ -1319,6 +1323,9 @@ function withNav(el, hasPrev, hasNext, go) {
   });
   return wrap;
 }
+
+/** Enquanto o detector procura agarras: foto acinzentada com uma faixa de luz descendo. */
+const scanning = (on, el) => { if (on) el.classList.add('detecting'); return el; };
 
 /** Foto de um boulder com as agarras da via marcadas. */
 const climbStage = (url, c) => url && stage([
