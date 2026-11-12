@@ -143,7 +143,16 @@ export function streakSheet() {
   );
 }
 
-/** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. */
+/** Fecha a janela sozinha depois de `ms`, se a pessoa não tocou nela (e se ainda é a mesma janela). */
+function autoClose(ms) {
+  const d = document.querySelector('#sheet');
+  const content = d.firstChild;
+  let touched = false;
+  d.addEventListener('pointerdown', () => { touched = true; }, { once: true });
+  setTimeout(() => { if (!touched && d.open && d.firstChild === content) d.close(); }, ms);
+}
+
+/** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. Fecha sozinha em 3,5 s. */
 export function celebrate({ unlocked, xp, levelUp, result }) {
   playResult(result);
   if (!unlocked.length && !levelUp) { toast(t('xp.gain', { n: xp })); return; }
@@ -163,6 +172,7 @@ export function celebrate({ unlocked, xp, levelUp, result }) {
       <button className="btn primary big block" type="button" onClick={closeSheet}>{t('nice')}</button>
     </div>,
   );
+  autoClose(3500);
 }
 
 /** Resumo ao encerrar a sessão. */
