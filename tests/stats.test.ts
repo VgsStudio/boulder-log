@@ -119,3 +119,17 @@ test('projeto aberto: some ao desistir ou depois de 45 dias parado', async () =>
   const [old] = projects([c('a', '2026-09-01', 5, 'project')]);
   assert.equal(isOpenProject(old, now), false);
 });
+
+test('styleStats: projeto mandado depois conta como mandado; cópia nunca tentada fica fora', async () => {
+  const { styleStats } = await import('../web/src/stats.js');
+  const ai = { holdTypes: ['sloper'], wallAngle: 'overhang' };
+  const climbs = [
+    { id: 'r', result: 'project', attempts: 1, grade: 3, ai },
+    { id: 't', result: 'sent', attempts: 1, grade: 3, projectId: 'r' },
+    { id: 'c', result: 'project', attempts: 0, grade: 5, ai },
+  ];
+  const s = styleStats(climbs).find((x) => x.key === 'hold:sloper');
+  assert.equal(s.sends, 1);
+  assert.equal(s.projects, 0);
+  assert.equal(s.maxSent, 3);
+});

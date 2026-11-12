@@ -1711,12 +1711,13 @@ function viewProgress() {
 
     styles.length > 0 && h('section', { class: 'card' }, h('h2', {}, t('progress.styles')),
       h('p', { class: 'muted small' }, t('progress.stylesHint')),
+      S.analyzedCount(state.climbs) < S.STYLE_MIN && h('p', { class: 'small style-early' }, t('progress.stylesEarly', { n: S.analyzedCount(state.climbs), m: S.STYLE_MIN })),
       h('div', { class: 'bars-h styles' }, styles.slice(0, 10).map((s) => h('div', {},
         h('span', {}, styleLabel(s.key)),
         h('div', { class: 'track' },
           h('span', { class: 'fill', style: { '--w': `${(s.sends / maxStyle) * 100}%` } }),
           h('span', { class: 'fill soft', style: { '--w': `${(s.projects / maxStyle) * 100}%` } })),
-        h('span', { class: 'num muted' }, `${s.sends}/${s.sends + s.projects}`)))),
+        h('span', { class: 'num muted' }, s.maxSent == null ? `0/${s.projects}` : `${s.sends}/${s.sends + s.projects} · ${grade(s.maxSent)}`)))),
       h('div', { class: 'legend' }, h('span', {}, h('i', { class: 'sent-i' }), t('progress.sends')), h('span', {}, h('i', { class: 'soft-i' }), t('progress.open')))),
   );
 }

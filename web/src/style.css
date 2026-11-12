@@ -590,3 +590,4 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .google-btn svg { width: 20px; height: 20px; }
 .svg-defs { position: absolute; }
 .legal-links { text-align: center; color: var(--muted); } .legal-links a { color: var(--muted); }
+.style-early { background: var(--orange-soft); color: var(--text); padding: 8px 12px; border-radius: 12px; }

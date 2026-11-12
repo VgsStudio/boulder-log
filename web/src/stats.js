@@ -94,21 +94,30 @@ export function projects(climbs) {
 }
 
 /** Estilos (da análise de IA): vias mandadas x em projeto, por tipo de agarra e ângulo. */
+/** Estilos (tipo de agarra e ângulo, vindos da IA) com quantas vias você mandou ou não, e o maior grau
+ *  mandado em cada um. A IA fica no 1º registro do projeto: o resultado conta o projeto inteiro
+ *  (mandou numa tentativa depois = mandou). Cópias de amigos nunca tentadas ficam de fora. */
 export function styleStats(climbs) {
   const out = new Map();
-  const add = (key, send) => {
-    const e = out.get(key) ?? { key, sends: 0, projects: 0 };
-    send ? e.sends++ : e.projects++;
+  const sentLater = new Set(climbs.filter((c) => c.projectId && isSend(c)).map((c) => c.projectId));
+  const tried = new Set(climbs.filter((c) => c.projectId).map((c) => c.projectId));
+  const add = (key, send, grade) => {
+    const e = out.get(key) ?? { key, sends: 0, projects: 0, maxSent: null };
+    if (send) { e.sends++; e.maxSent = Math.max(e.maxSent ?? -1, grade); } else e.projects++;
     out.set(key, e);
   };
   for (const c of climbs) {
-    if (!c.ai) continue;
-    const send = isSend(c);
-    for (const h of c.ai.holdTypes ?? []) add(`hold:${h}`, send);
-    if (c.ai.wallAngle) add(`angle:${c.ai.wallAngle}`, send);
+    if (!c.ai || c.projectId) continue;
+    if (!c.attempts && !tried.has(c.id) && !isSend(c)) continue; // nunca tentado
+    const send = isSend(c) || sentLater.has(c.id);
+    for (const h of c.ai.holdTypes ?? []) add(`hold:${h}`, send, c.grade);
+    if (c.ai.wallAngle) add(`angle:${c.ai.wallAngle}`, send, c.grade);
   }
   return [...out.values()].sort((a, b) => b.sends + b.projects - (a.sends + a.projects));
 }
+/** Quantos boulders analisados pela IA entram no card de estilos. */
+export const analyzedCount = (climbs) => climbs.filter((c) => c.ai && !c.projectId).length;
+export const STYLE_MIN = 15; // abaixo disso o card avisa que ainda é cedo para conclusões
 
 /** Sessões na semana corrente (para a meta semanal). */
 export const sessionsThisWeek = (sessions, now = new Date()) =>
