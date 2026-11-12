@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { analyzePhoto, COLORS, sanitizeAi } from './ai.ts';
+import { cleanSubscription, pushTo, removeSubscription, saveSubscription, sendDaily, setPrefs, validTz, vapidKeys } from './push.ts';
 // Mesmas contas de XP/nível/sequência do app (uma fonte só).
 import { distanceKm, isSend, level, streakWeeks, totalXp } from '../web/src/stats.js';
 import {
@@ -513,6 +514,37 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       log('share.accepted', { share: String(pid).slice(0, 4) });
       return json(201, climb);
     }
+    // ---------- notificações ----------
+    case 'GET /api/push/key':
+      return json(200, { publicKey: (await vapidKeys()).publicKey });
+    case 'POST /api/push/subscribe': {
+      const b = body();
+      const s = cleanSubscription(b.subscription) ?? bad('subscription');
+      await saveSubscription(sub, s);
+      const prefs = await setPrefs(sub, {
+        on: true,
+        tz: b.tz === undefined ? undefined : validTz(b.tz) ?? bad('tz'),
+        lang: b.lang === undefined ? undefined : oneOf(['pt', 'en'] as const, b.lang, 'lang'),
+      });
+      return json(200, prefs);
+    }
+    case 'POST /api/push/unsubscribe': {
+      const s = cleanSubscription(body().subscription);
+      if (s) await removeSubscription(sub, s.endpoint);
+      return json(200, { ok: true });
+    }
+    case 'PUT /api/push/prefs': {
+      const b = body();
+      return json(200, await setPrefs(sub, {
+        on: b.on === undefined ? undefined : typeof b.on === 'boolean' ? b.on : bad('on'),
+        hour: b.hour === undefined ? undefined : b.hour === null ? null : int(b.hour, 0, 23, 'hour'),
+        tz: b.tz === undefined ? undefined : validTz(b.tz) ?? bad('tz'),
+        lang: b.lang === undefined ? undefined : oneOf(['pt', 'en'] as const, b.lang, 'lang'),
+      }));
+    }
+    case 'POST /api/push/test':
+      return json(200, await sendDaily(sub, { force: true }));
+
     case 'POST /api/feedback': {
       // Avaliação do app: uma por pessoa por dia (reenviar no mesmo dia substitui). Lida pelo dono do app.
       const b = body();
@@ -655,6 +687,15 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
           ? keys.map((k) => ({ Put: { TableName: TABLE, Item: { ...k, at } } }))
           : keys.map((k) => ({ Delete: { TableName: TABLE, Key: k } })),
       }));
+      if (on) {
+        const me = await profileOf(sub);
+        const pt = ((await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(them), sk: 'SETTINGS' } }))).Item?.pushLang ?? 'pt') === 'pt';
+        await pushTo(them, {
+          title: pt ? `👋 ${me?.name} começou a te seguir` : `👋 ${me?.name} started following you`,
+          body: pt ? 'Toque para ver o perfil e seguir de volta.' : 'Tap to see the profile and follow back.',
+          url: `/#/u/${me?.handle}`, tag: `follow-${sub.slice(0, 8)}`,
+        }).catch((e) => log('push.follow', { message: (e as Error).message.slice(0, 120) }));
+      }
       return json(200, { following: on, followsMe: await isFollowing(them, sub) });
     }
     case 'POST /api/users/{handle}/climbs/{id}/copy': {

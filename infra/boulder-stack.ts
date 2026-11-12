@@ -20,6 +20,8 @@ import * as r53targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as ses from 'aws-cdk-lib/aws-ses';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import type { Construct } from 'constructs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -101,6 +103,23 @@ export class BoulderStack extends Stack {
       bundling: { minify: true, externalModules: [] },
     });
     table.grantReadWriteData(apiFn);
+
+    // Lembrete diário: de hora em hora, quem está no balde daquela hora UTC (services/push.ts).
+    // Custa praticamente zero: 720 execuções curtas por mês e uma Query por execução.
+    const notifyFn = new NodejsFunction(this, 'NotifyFn', {
+      entry: path.join(ROOT, 'services', 'notify.ts'),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(120),
+      environment: { TABLE_NAME: table.tableName },
+      bundling: { minify: true, externalModules: [] },
+    });
+    table.grantReadWriteData(notifyFn);
+    new events.Rule(this, 'NotifyHourly', {
+      schedule: events.Schedule.cron({ minute: '1' }),
+      targets: [new targets.LambdaFunction(notifyFn)],
+    });
     photos.grantReadWrite(apiFn, 'photos/*');
     photos.grantDelete(apiFn, 'photos/*');
     // Converse no modelo de AI_MODEL: o perfil de inferência (us.*) e os modelos de base para onde ele roteia.
@@ -252,6 +271,7 @@ export class BoulderStack extends Stack {
       ['/api/settings', M.GET], ['/api/settings', M.PUT],
       ['/api/climbs/{id}/share', M.POST], ['/api/shares/{id}', M.GET], ['/api/shares/{id}/accept', M.POST],
       ['/api/account', M.DELETE], ['/api/feedback', M.POST],
+      ['/api/push/key', M.GET], ['/api/push/subscribe', M.POST], ['/api/push/unsubscribe', M.POST], ['/api/push/prefs', M.PUT], ['/api/push/test', M.POST],
       ['/api/profile', M.GET], ['/api/profile', M.PUT], ['/api/users', M.GET], ['/api/users/{handle}', M.GET],
       ['/api/users/{handle}/follow', M.POST], ['/api/users/{handle}/follow', M.DELETE],
       ['/api/users/{handle}/climbs/{id}/copy', M.POST], ['/api/social', M.GET],

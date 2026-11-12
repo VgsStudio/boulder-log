@@ -21,10 +21,12 @@
     "@aws-sdk/lib-dynamodb": "^3.1167.0",
     "@aws-sdk/s3-presigned-post": "^3.1167.0",
     "@aws-sdk/s3-request-presigner": "^3.1167.0",
-    "onnxruntime-web": "^1.31.1"
+    "onnxruntime-web": "^1.31.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/web-push": "^3.6.4",
     "aws-cdk": "^2.1148.1",
     "aws-cdk-lib": "^2.276.0",
     "constructs": "^10.8.1",

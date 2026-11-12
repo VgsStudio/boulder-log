@@ -1862,6 +1862,7 @@ function settingsSheet() {
       seg([['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']], langChoice(), (v) => setLang(v))),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.theme')),
       seg([['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]], getTheme(), (v) => { setTheme(v); draw(); })),
+    !guestMode && pushSettings(),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.sound')),
       seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') playSent(); draw(); })),
     h('h2', {}, t('settings.goals')),
@@ -1897,6 +1898,102 @@ function settingsSheet() {
   );
   draw();
   openSheet(box);
+}
+
+// ---------- notificações (Web Push) ----------
+// iPhone: só com o app instalado na tela inicial (iOS 16.4+). O pedido de permissão precisa de um toque.
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const tzName = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'America/Sao_Paulo'; } };
+const b64ToBytes = (b64) => Uint8Array.from(atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+/** Pede permissão (se preciso), assina neste aparelho e avisa o servidor. Devolve as preferências ou null. */
+async function enablePush() {
+  if (!pushSupported()) return null;
+  if (Notification.permission !== 'granted' && (await Notification.requestPermission()) !== 'granted') return null;
+  const reg = await navigator.serviceWorker.ready;
+  const { publicKey } = await api('/push/key');
+  let sub = await reg.pushManager.getSubscription();
+  // Chave mudou (ou primeira vez): assina de novo.
+  if (sub && b64ToBytes(publicKey).toString() !== new Uint8Array(sub.options?.applicationServerKey ?? []).toString()) { await sub.unsubscribe().catch(() => {}); sub = null; }
+  sub ??= await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+  const prefs = await api('/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON(), tz: tzName(), lang } });
+  try { localStorage.setItem('cm:pushSync', String(Date.now())); } catch {}
+  return prefs;
+}
+
+/** Na abertura: com permissão dada, mantém a assinatura em dia (1x por dia); sem, pede com um convite. */
+function maybeAskPush() {
+  if (guestMode || !pushSupported() || $('#sheet').open) return;
+  if (Notification.permission === 'granted') {
+    if (Date.now() - Number(localStorage.getItem('cm:pushSync') || 0) > 86400_000) enablePush().catch((e) => console.warn('push', e));
+    return;
+  }
+  if (Notification.permission === 'denied') return;
+  if (Date.now() - Number(localStorage.getItem('cm:pushAsk') || 0) < 3 * 86400_000) return; // "agora não": de novo em 3 dias
+  pushSheet();
+}
+
+function pushSheet() {
+  try { localStorage.setItem('cm:pushAsk', String(Date.now())); } catch {}
+  const name = state.profile?.name?.split(' ')[0];
+  openSheet(h('div', { class: 'stack push-ask' },
+    h('div', { class: 'push-bell', 'aria-hidden': 'true' }, '🔔'),
+    h('h2', {}, name ? t('push.titleName', { n: name }) : t('push.title')),
+    h('p', { class: 'muted' }, t('push.lead')),
+    h('ul', { class: 'terms' }, ['streak', 'project', 'friends'].map((k) => h('li', {}, t(`push.why.${k}`)))),
+    h('button', {
+      class: 'btn primary big block', type: 'button',
+      onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        try {
+          const p = await enablePush();
+          $('#sheet').close();
+          if (p) { playTick(); toast(t('push.on', { h: `${p.effectiveHour}h` })); } else toast(t('push.blocked'));
+        } catch (err) { fail(err); e.target.disabled = false; }
+      },
+    }, t('push.enable')),
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow'))));
+}
+
+/** Bloco dos Ajustes: liga/desliga, horário (automático ou fixo) e "enviar teste". */
+function pushSettings() {
+  const box = h('div', { class: 'stack push-settings' });
+  const st = state.settings;
+  const draw = (msg = '') => {
+    const on = pushSupported() && Notification.permission === 'granted' && st.pushOn !== false;
+    fill(box,
+      h('div', { class: 'small muted' }, t('push.settings')),
+      !pushSupported()
+        ? h('p', { class: 'small muted' }, /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone ? t('push.needInstall') : t('push.unsupported'))
+        : [
+          seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], on ? 'on' : 'off', async (v) => {
+            try {
+              if (v === 'on') { const p = await enablePush(); if (!p) { toast(t('push.blocked')); return; } Object.assign(st, { pushOn: true, pushHour: p.pushHour }); }
+              else { await api('/push/prefs', { method: 'PUT', body: { on: false } }); st.pushOn = false; }
+              draw();
+            } catch (err) { fail(err); }
+          }),
+          on && h('label', { class: 'field' }, h('span', {}, t('push.hour')),
+            h('select', {
+              onchange: async (e) => {
+                const hour = e.target.value === '' ? null : Number(e.target.value);
+                try { const p = await api('/push/prefs', { method: 'PUT', body: { hour, tz: tzName() } }); st.pushHour = p.pushHour; draw(t('push.hourSaved', { h: `${p.effectiveHour}h` })); } catch (err) { fail(err); }
+              },
+            },
+            h('option', { value: '', selected: st.pushHour == null }, t('push.auto')),
+            [...Array(16)].map((_, i) => i + 7).map((hh) => h('option', { value: String(hh), selected: st.pushHour === hh }, `${hh}h`)))),
+          on && h('button', {
+            class: 'btn block', type: 'button',
+            onclick: async (e) => {
+              e.currentTarget.disabled = true;
+              try { const r = await api('/push/test', { method: 'POST' }); draw(r.sent ? t('push.testSent') : t('push.testNone')); } catch (err) { fail(err); e.target.disabled = false; }
+            },
+          }, t('push.test')),
+          msg && h('p', { class: 'small muted' }, msg),
+        ]);
+  };
+  draw();
+  return box;
 }
 
 // ---------- avaliação ("está gostando?") ----------
@@ -2222,7 +2319,8 @@ async function boot() {
       setTimeout(() => { if (!$('#sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); }, 600);
     }
   } catch {}
-  setTimeout(maybeAskFeedback, 4000);
+  setTimeout(maybeAskPush, 2500);
+  setTimeout(maybeAskFeedback, 6000);
   setInterval(checkAutoEnd, 5 * 60_000);
 }
 
