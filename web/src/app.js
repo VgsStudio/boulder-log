@@ -1303,9 +1303,9 @@ async function shareClimb(c, btn) {
     const { token } = await api(`/climbs/${c.id}/share`, { method: 'POST' });
     const url = `${location.origin}/#/s/${token}`;
     const gym = gymOf(state.sessions.find((s) => s.id === c.sessionId)?.gymId)?.name ?? c.gymName;
-    const text = gym
-      ? t('share.textGym', { c: colorName(c.color).toLowerCase(), g: grade(c.grade), gym })
-      : t('share.text', { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
+    // "essa via vermelha V3" (cor "outra" fica só "essa via V3")
+    const cn = c.color === 'other' ? '' : colorName(c.color).toLowerCase();
+    const text = (gym ? t('share.textGym', { c: cn, g: grade(c.grade), gym }) : t('share.text', { c: cn, g: grade(c.grade) })).replace(/ {2,}/g, ' ');
     const copy = async () => {
       try { await navigator.clipboard.writeText(url); toast(t('share.copied')); } catch { toast(url); }
     };
