@@ -127,7 +127,23 @@ export class BoulderStack extends Stack {
     const fromEmail = `no-reply@${props.zoneName}`;
 
     // ---------- Login (Cognito Managed Login com a cara do app) ----------
+    // Uma pessoa = uma conta: vincula o Google à conta de e-mail e senha com o mesmo e-mail (services/presignup.ts).
+    const preSignUp = new NodejsFunction(this, 'PreSignUpFn', {
+      entry: path.join(ROOT, 'services', 'presignup.ts'),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 256,
+      timeout: Duration.seconds(5),
+      bundling: { minify: true, externalModules: [] },
+    });
+    // ARN montado à mão: referenciar o pool aqui criaria um ciclo (o pool depende deste gatilho).
+    preSignUp.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminLinkProviderForUser'],
+      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/*`],
+    }));
+
     const userPool = new cognito.UserPool(this, 'Users', {
+      lambdaTriggers: { preSignUp },
       userPoolName: 'boulder-log',
       selfSignUpEnabled: true,
       signInAliases: { email: true },

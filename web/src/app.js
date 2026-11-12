@@ -148,6 +148,15 @@ async function tokenCall(body) {
 
 let refreshing;
 async function idToken() {
+  // Primeira entrada com Google numa conta que acabou de ser vinculada: o Cognito devolve um erro
+  // ("Already found an entry") uma única vez; tentar de novo já entra na conta certa.
+  const desc = new URLSearchParams(location.search).get('error_description') ?? '';
+  if (/already found an entry/i.test(desc)) {
+    history.replaceState({}, '', '/');
+    let retried = false;
+    try { retried = sessionStorage.getItem('cm:linkRetry') === '1'; sessionStorage.setItem('cm:linkRetry', '1'); } catch {}
+    if (!retried) { await login('oauth2/authorize', { identity_provider: 'Google' }); return null; }
+  }
   const code = new URLSearchParams(location.search).get('code');
   if (code) {
     history.replaceState({}, '', '/');
@@ -1882,6 +1891,7 @@ function showAuth() {
     ExpiredCodeException: t('auth.err.expired'), LimitExceededException: t('auth.err.limit'),
     TooManyRequestsException: t('auth.err.limit'), TooManyFailedAttemptsException: t('auth.err.limit'),
     InvalidParameterException: t('auth.err.email'), UserNotFoundException: t('auth.err.wrong'),
+    UserLambdaValidationException: /USE_GOOGLE/.test(err.message) ? t('auth.err.useGoogle') : t('error.generic'),
   }[err.code] ?? (navigator.onLine ? t('error.generic') : t('error.offline')));
   const signedIn = (r) => {
     saveTokens(fromAuthResult(r.AuthenticationResult));
