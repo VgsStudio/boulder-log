@@ -2,7 +2,7 @@
 import { fmtDate, fmtDuration, fmtPct, lang, t } from '../i18n.js';
 import { COLORS } from '../color.js';
 import * as S from '../stats.js';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RESULTS, state, gymOf, colorName, grade, sessionsText, capitalize, api, toast, fail, loadAll } from '../core.js';
 import { render } from '../app.js';
 import { track } from '../analytics.js';
@@ -92,15 +92,14 @@ export function History() {
           ? (
             <ul className="list card">
               {summaries.map((s) => (
-                <li key={s.id}>
+                <SwipeRow key={s.id} enabled={!!s.endedAt} label={t('session.deleteShort')} onAction={() => deleteSession(s, climbsOf(s))}>
                   <details className="session" open={summaries.length === 1}>
                     <summary><div className="grow"><SessionHeader s={s} /></div></summary>
                     <ul className="list" onClick={() => setNav(summaries.flatMap((x) => climbsOf(x).map((c) => c.id)))}>
                       {climbsOf(s).map((c) => <ClimbRow key={c.id} c={c} />)}
                     </ul>
-                    {s.endedAt && <DeleteSession s={s} climbs={climbsOf(s)} />}
                   </details>
-                </li>
+                </SwipeRow>
               ))}
             </ul>
           )
@@ -131,31 +130,65 @@ export function History() {
   );
 }
 
-/** Excluir uma sessão (e os boulders dela): toque duplo para confirmar. */
-function DeleteSession({ s, climbs }) {
-  const [confirm, setConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const del = async () => {
-    if (!confirm) { setConfirm(true); return; }
-    setBusy(true);
-    try {
-      // Tentativas primeiro, depois os boulders, depois a sessão.
-      for (const c of [...climbs].sort((a, b) => (b.projectId ? 1 : 0) - (a.projectId ? 1 : 0))) {
-        await api(`/climbs/${c.id}`, { method: 'DELETE' });
-        state.climbs = state.climbs.filter((x) => x.id !== c.id);
-        if (state.profile?.pinned === c.id) state.profile.pinned = null;
-      }
-      await api(`/sessions/${s.id}`, { method: 'DELETE' });
-      state.sessions = state.sessions.filter((x) => x.id !== s.id);
-      track('session_deleted', { climbs: climbs.length });
-      toast(t('session.deleted'));
-      render();
-    } catch (err) { fail(err); loadAll().then(render, () => {}); }
+/** Excluir uma sessão e os boulders dela (tentativas primeiro, depois os boulders, depois a sessão). */
+async function deleteSession(s, climbs) {
+  try {
+    for (const c of [...climbs].sort((a, b) => (b.projectId ? 1 : 0) - (a.projectId ? 1 : 0))) {
+      await api(`/climbs/${c.id}`, { method: 'DELETE' });
+      state.climbs = state.climbs.filter((x) => x.id !== c.id);
+      if (state.profile?.pinned === c.id) state.profile.pinned = null;
+    }
+    await api(`/sessions/${s.id}`, { method: 'DELETE' });
+    state.sessions = state.sessions.filter((x) => x.id !== s.id);
+    track('session_deleted', { climbs: climbs.length });
+    toast(t('session.deleted'));
+    render();
+  } catch (err) { fail(err); loadAll().then(render, () => {}); }
+}
+
+/** Linha que arrasta para a esquerda (ou abre ao segurar) e mostra uma ação vermelha, como no WhatsApp. */
+const ACT_W = 96;
+function SwipeRow({ children, enabled, label, onAction }) {
+  const [open, setOpen] = useState(false);
+  const [dx, setDx] = useState(null); // arrasto em andamento (px)
+  const g = useRef(null);
+  const last = useRef(0);
+  if (!enabled) return <li>{children}</li>;
+  const start = (e) => {
+    const t0 = e.touches[0];
+    g.current = { x: t0.clientX, y: t0.clientY, base: open ? -ACT_W : 0, dir: null, moved: false };
+    g.current.timer = setTimeout(() => { if (g.current && !g.current.moved) { g.current.long = true; setOpen(true); try { navigator.vibrate?.(15); } catch {} } }, 500);
   };
+  const move = (e) => {
+    const s = g.current;
+    if (!s) return;
+    const x = e.touches[0].clientX - s.x, y = e.touches[0].clientY - s.y;
+    if (Math.abs(x) > 6 || Math.abs(y) > 6) { s.moved = true; clearTimeout(s.timer); }
+    s.dir ??= Math.abs(x) > 8 ? 'x' : Math.abs(y) > 8 ? 'y' : null;
+    if (s.dir === 'x') { s.cur = Math.max(-ACT_W * 1.3, Math.min(0, s.base + x)); setDx(s.cur); }
+  };
+  const end = () => {
+    const s = g.current;
+    g.current = null;
+    if (!s) return;
+    clearTimeout(s.timer);
+    if (s.dir === 'x' && s.cur != null) setOpen(s.cur < -ACT_W / 2);
+    setDx(null);
+    s.swallow = s.long || s.dir === 'x';
+    if (s.swallow) last.current = Date.now();
+  };
+  // Depois de arrastar ou segurar, o toque não abre/fecha a sessão.
+  const click = (e) => { if (Date.now() - last.current < 400) { e.preventDefault(); e.stopPropagation(); } else if (open) { e.preventDefault(); setOpen(false); } };
+  const x = dx ?? (open ? -ACT_W : 0);
   return (
-    <button className="link small danger-link" type="button" disabled={busy} onClick={del}>
-      {confirm ? t('session.confirmDelete', { n: climbs.length }) : t('session.delete')}
-    </button>
+    <li className="swipe">
+      <button className="swipe-act" type="button" tabIndex={open ? 0 : -1} onClick={() => { setOpen(false); onAction(); }}>{label}</button>
+      <div className="swipe-body" style={{ transform: `translateX(${x}px)`, transition: dx == null ? 'transform .2s ease-out' : 'none' }}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end} onClickCapture={click}
+        onContextMenu={(e) => { e.preventDefault(); setOpen(true); }}>
+        {children}
+      </div>
+    </li>
   );
 }
 

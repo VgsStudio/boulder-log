@@ -708,3 +708,9 @@ img.fade.in { opacity: 1; }
 /* Contêiner das telas em React: não ocupa espaço no layout */
 .rx { display: contents; }
 #root { display: contents; }
+
+/* Arrastar para a esquerda (ou segurar) mostra "Excluir" atrás da linha, como no WhatsApp */
+.swipe { position: relative; overflow: hidden; }
+.swipe-act { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; border: 0; background: var(--pink-deep); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.swipe-body { position: relative; background: var(--surface); touch-action: pan-y; }
+@media (prefers-reduced-motion: reduce) { .swipe-body { transition: none !important; } }
