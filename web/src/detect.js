@@ -31,7 +31,6 @@ function getWorker() {
   return worker;
 }
 /** Começa a baixar runtime e modelo antes da primeira foto (o worker carrega sob demanda). */
-export const loadDetector = () => getWorker();
 
 function iou(a, b) {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
