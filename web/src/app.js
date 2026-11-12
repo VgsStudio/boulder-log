@@ -756,6 +756,7 @@ function viewNew() {
 
   const save = async (e) => {
     if (!d.color) { toast(t('climb.color')); return; }
+    if (!d.result) { toast(t('climb.pickResult')); document.querySelector('.seg')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
     const btn = e.currentTarget;
     btn.disabled = true;
     btn.textContent = t('climb.saving');
@@ -815,7 +816,7 @@ function viewNew() {
             class: 'chip', type: 'button', 'aria-pressed': String(d.projectId === p.root.id),
             onclick: () => {
               if (d.projectId === p.root.id) Object.assign(d, { projectId: null });
-              else Object.assign(d, { projectId: p.root.id, color: p.root.color, grade: p.root.grade, result: 'project', canvas: null, tap: null });
+              else Object.assign(d, { projectId: p.root.id, color: p.root.color, grade: p.root.grade, result: null, canvas: null, tap: null }); // escolha explícita: mandou ou não
               draw();
             },
           }, swatch(p.root.color), h('strong', {}, grade(p.root.grade)), h('span', { class: 'muted' }, sessionsText(p.sessions)))))),
