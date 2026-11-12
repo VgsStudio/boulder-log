@@ -43,11 +43,16 @@ export async function startAnalytics({ userId, guest }) {
       // Fotos (parede, perfil) não são gravadas.
       blockSelector: 'img, canvas, .avatar',
     },
+    // Depuração: localStorage.ph_debug = 'true' mostra no console tudo que é enviado.
+    debug: (() => { try { return localStorage.getItem('ph_debug') === 'true'; } catch { return false; } })(),
+    // Só manda o que estava na fila depois que o PostHog terminou de carregar.
+    loaded: (p) => {
+      if (userId) p.identify(userId);
+      p.register({ app_lang: document.documentElement.lang, guest: !!guest, installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true });
+      ph = p;
+      queue.splice(0).forEach(([e, props]) => p.capture(e, props));
+    },
   });
-  if (userId) posthog.identify(userId);
-  posthog.register({ app_lang: document.documentElement.lang, guest: !!guest, installed: matchMedia('(display-mode: standalone)').matches || navigator.standalone === true });
-  ph = posthog;
-  queue.splice(0).forEach(([e, p]) => posthog.capture(e, p));
 }
 
 /** Liga/desliga em Ajustes. */

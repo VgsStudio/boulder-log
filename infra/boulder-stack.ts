@@ -289,7 +289,8 @@ export class BoulderStack extends Stack {
     const csp = [
       "default-src 'self'",
       // wasm-unsafe-eval: só permite compilar WebAssembly (o detector de agarras), não eval de JS.
-      "script-src 'self' 'wasm-unsafe-eval'",
+      // eu-assets.i.posthog.com: configuração do projeto no PostHog (estatísticas).
+      "script-src 'self' 'wasm-unsafe-eval' https://eu-assets.i.posthog.com",
       "worker-src 'self' blob:",
       "style-src 'self'",
       `img-src 'self' blob: data: ${s3Hosts}`,
