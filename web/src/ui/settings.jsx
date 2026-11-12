@@ -44,7 +44,7 @@ function Settings() {
       <h2>{t('settings.title')}</h2>
 
       <section className="settings-group">
-        <h3>{t('settings.prefs')}</h3>
+        <h3>{t('settings.climbing')}</h3>
         <Field label={t('settings.scale')}><Seg options={[['v', 'V (Hueco)'], ['font', 'Font']]} value={st.scale} onPick={(v) => change({ scale: v })} /></Field>
         <div className="row"><span className="grow">{t('settings.weekly')}</span>
           <Stepper value={st.weeklySessions} min={0} max={7} onChange={(n) => change({ weeklySessions: n })} label={t('settings.weekly')} />
@@ -55,13 +55,25 @@ function Settings() {
             {S.GRADES.map((g) => <option key={g} value={String(g)}>{S.gradeLabel(g, st.scale)}</option>)}
           </select>
         </label>
+      </section>
+
+      <section className="settings-group">
+        <h3>{t('settings.look')}</h3>
         <Field label={t('settings.lang')}><Seg options={[['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']]} value={langChoice()} onPick={(v) => setLang(v)} /></Field>
         <Field label={t('settings.theme')}><Seg options={[['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]]} value={getTheme()} onPick={(v) => { setTheme(v); redraw((n) => n + 1); }} /></Field>
-        <Field label={t('settings.stats')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={statsOn() ? 'on' : 'off'} onPick={(v) => { setStats(v === 'on'); redraw((n) => n + 1); }} /></Field>
+      </section>
+
+      <section className="settings-group">
+        <h3>{t('settings.soundGroup')}</h3>
         <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playResult('sent'); redraw((n) => n + 1); }} /></Field>
       </section>
 
       {!guestMode && <section className="settings-group"><h3>{t('push.settings')}</h3><PushSettings /></section>}
+
+      <section className="settings-group">
+        <h3>{t('settings.privacy')}</h3>
+        <Field label={t('settings.stats')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={statsOn() ? 'on' : 'off'} onPick={(v) => { setStats(v === 'on'); redraw((n) => n + 1); }} /></Field>
+      </section>
 
       <section className="settings-group">
         <h3>{t('settings.account')}</h3>

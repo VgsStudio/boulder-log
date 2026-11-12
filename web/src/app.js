@@ -9,6 +9,7 @@ import { PHOTO_TERMS_VERSION, cfg, state, toast, fail, idToken, guestMode, api, 
 import { checkAutoEnd, sheetSwipe } from './session.js';
 import { backfillPreviews } from './ui/climb.jsx';
 import { profileSheet, claims } from './ui/social.jsx';
+import { loadInbox } from './ui/inbox.jsx';
 import { tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './ui/settings.jsx';
 import { App, shell, setShell, restoreScroll, needAccount, showAuth } from './ui/shell.jsx';
 
@@ -92,8 +93,10 @@ async function boot() {
       try { await loadAll(); render(); } catch {}
     }
     checkAutoEnd();
+    if (document.visibilityState === 'visible') loadInbox();
   });
   setShell({ ready: true });
+  loadInbox();
   startAnalytics({ userId: guestMode ? null : claims().sub, guest: guestMode }).catch((e) => console.warn('stats', e));
   checkAutoEnd();
   // Primeira vez (sem perfil): boas-vindas com nome e @ já sugeridos; "agora não" pergunta de novo amanhã.

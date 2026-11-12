@@ -13,6 +13,7 @@ import { NewClimb, ClimbView, ShareView, onCameraPhoto } from './climb.jsx';
 import { History, Progress } from './history.jsx';
 import { Feed, Me, Friends, User } from './social.jsx';
 import { settingsSheet } from './settings.jsx';
+import { Bell } from './inbox.jsx';
 
 // ---------- estado da casca ----------
 /** ready: dados carregados; auth: tela de login aberta ({ mode, blocked }); nonce: força remontar a tela. */
@@ -71,6 +72,7 @@ export function App() {
       <header className="top">
         <a className="brand" href="#/"><img className="brand-mark" src="/icon.svg" alt="" width={30} height={30} />Chalkmark</a>
         <div className="row">
+          {showChrome && <Bell />}
           {showChrome && <StreakPill />}
           {guestMode && !sh.auth && sh.ready && <button className="btn small-btn primary" type="button" onClick={() => showAuth({ mode: 'signup' })}>{t('guest.cta')}</button>}
           {showChrome && (

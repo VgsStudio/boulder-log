@@ -319,6 +319,16 @@ async function blockedEither(a: string, b: string) {
 }
 const FEED_PAGE = 20;
 const FEEDBACK_XP = 50;
+const INBOX_DAYS = 60;
+/** Aviso na caixa (sininho) de alguém. Um por pessoa+tipo+boulder: repetir só atualiza a data. */
+async function inboxAdd(to: string, kind: 'follow' | 'fire', from: Record<string, any> | undefined, extra: Record<string, unknown> = {}) {
+  if (!from) return;
+  const key = `INBOX#${kind}#${String(from.pk).slice(5)}#${extra.climbId ?? ''}`;
+  await ddb.send(new PutCommand({ TableName: TABLE, Item: {
+    pk: pkOf(to), sk: key, kind, at: nowIso(), from: { handle: from.handle, name: from.name }, ...extra,
+    ttl: Math.floor(Date.now() / 1000) + INBOX_DAYS * 86400,
+  } }));
+}
 const MAX_FEED_FRIENDS = 100;
 
 // ---------- cota diária de IA (contadores atômicos: por conta e do app inteiro) ----------
@@ -603,6 +613,21 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       }));
     }
 
+    case 'GET /api/inbox': {
+      // Sininho: últimos avisos (novos seguidores, 🔥) e até quando a pessoa já viu.
+      const [items, { Item: st }] = await Promise.all([
+        queryAll(pk, 'INBOX#'),
+        ddb.send(new GetCommand({ TableName: TABLE, Key: { pk, sk: 'SETTINGS' }, ProjectionExpression: 'inboxSeen' })),
+      ]);
+      const list = items.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 50)
+        .map(({ kind, at, from, climbId, grade, color }) => ({ kind, at, from, climbId, grade, color }));
+      return json(200, { items: list, seenAt: st?.inboxSeen ?? null });
+    }
+    case 'POST /api/inbox/seen': {
+      const at = nowIso();
+      await ddb.send(new UpdateCommand({ TableName: TABLE, Key: { pk, sk: 'SETTINGS' }, UpdateExpression: 'SET inboxSeen = :t', ExpressionAttributeValues: { ':t': at } }));
+      return json(200, { seenAt: at });
+    }
     case 'POST /api/feedback': {
       // Avaliação do app: uma por pessoa por dia (reenviar no mesmo dia substitui). Lida pelo dono do app.
       const b = body();
@@ -761,6 +786,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       }));
       if (on) {
         const me = await profileOf(sub);
+        await inboxAdd(them, 'follow', me).catch((e) => log('inbox.failed', { message: (e as Error).message.slice(0, 120) }));
         const pt = ((await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(them), sk: 'SETTINGS' } }))).Item?.pushLang ?? 'pt') === 'pt';
         await pushTo(them, {
           title: pt ? `👋 ${me?.name} começou a te seguir` : `👋 ${me?.name} started following you`,
@@ -867,6 +893,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       }
       if (on) {
         const me = await profileOf(sub);
+        await inboxAdd(them, 'fire', me, { climbId: cid, grade: climb.grade, color: climb.color }).catch((e) => log('inbox.failed', { message: (e as Error).message.slice(0, 120) }));
         const pt = ((await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(them), sk: 'SETTINGS' } }))).Item?.pushLang ?? 'pt') === 'pt';
         await pushTo(them, {
           title: pt ? `🔥 ${me?.name} curtiu seu V${climb.grade}` : `🔥 ${me?.name} liked your V${climb.grade}`,
