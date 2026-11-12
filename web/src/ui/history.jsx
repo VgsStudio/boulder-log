@@ -33,7 +33,7 @@ export function SessionHeader({ s }) {
 export const historyUi = { month: null, day: null, tab: 'sessions', color: '', result: '' };
 const byNewest = (a, b) => b.createdAt.localeCompare(a.createdAt);
 
-export function History() {
+export function History({ embedded = false }) {
   useStore();
   const redraw = useRedraw();
   const ui = historyUi;
@@ -59,8 +59,8 @@ export function History() {
     .sort(byNewest);
 
   return (
-    <div className="stack">
-      <h1>{t('tab.history')}</h1>
+    <div className="stack" id="historico">
+      {embedded ? <h2>{t('tab.history')}</h2> : <h1>{t('tab.history')}</h1>}
       <section className="card">
         <div className="cal-head">
           <button type="button" aria-label="‹" onClick={() => shift(-1)}>‹</button>

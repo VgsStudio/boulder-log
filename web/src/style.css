@@ -725,3 +725,7 @@ img.fade.in { opacity: 1; }
 .suggest::-webkit-scrollbar { display: none; }
 .suggest > li.card { margin: 0; }
 .suggest.big a { flex: 1; }
+
+/* Números do meu perfil levam aos lugares */
+.kpi-link { font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.kpi-link:active { transform: translateY(1px); }

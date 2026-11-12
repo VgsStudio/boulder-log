@@ -22,10 +22,10 @@ const useShell = () => { useSyncExternalStore(subscribe, getVersion); return she
 
 // ---------- rotas ----------
 const ROUTES = [
-  [/^#?\/?$/, () => <Session />, 'session', 'session'],
+  [/^#?\/?$/, () => <SessionAndHistory />, 'session', 'session'],
   [/^#\/new$/, () => <NewClimb />, 'session', 'new_climb'],
   [/^#\/climb\/([a-z0-9]{19})$/, (id) => <ClimbView id={id} />, null, 'climb'],
-  [/^#\/history$/, () => <History />, 'history', 'history'],
+  [/^#\/history$/, () => <SessionAndHistory toHistory />, 'session', 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, (token) => <ShareView token={token} />, null, 'shared_climb'],
   [/^#\/progress$/, () => <Progress />, 'profile', 'progress'],
   [/^#\/feed$/, () => <Feed />, 'feed', 'home'],
@@ -33,8 +33,10 @@ const ROUTES = [
   [/^#\/friends$/, () => <Friends />, 'profile', 'friends'],
   [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => <User handle={handle} />, 'profile', 'user_profile'],
 ];
-/** Abre na Home; com sessão aberta (ou sem conta), na Sessão. */
-const currentHash = () => location.hash || (guestMode || state.sessions.some((s) => !s.endedAt) ? '#/' : '#/feed');
+// Home (feed) fora da barra enquanto há poucos usuários: a rota #/feed continua existindo.
+const HOME_ON = false;
+/** Abre no perfil (sem conta, na Sessão). */
+const currentHash = () => location.hash || (guestMode ? '#/' : '#/me');
 export const routeOf = (hash) => {
   const [re, fn, tab, name] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
   return { el: fn(...(hash.match(re)?.slice(1) ?? [])), tab, name };
@@ -88,6 +90,12 @@ export function App() {
 }
 const Screen = ({ children }) => children;
 
+/** Aba da montanha: a sessão (começar / aberta) e, logo abaixo, o histórico. */
+function SessionAndHistory({ toHistory = false }) {
+  useLayoutEffect(() => { if (toHistory) document.getElementById('historico')?.scrollIntoView({ block: 'start' }); }, [toHistory]);
+  return <div className="stack"><Session /><History embedded /></div>;
+}
+
 function StreakPill() {
   const n = S.streakWeeks(state.sessions);
   if (!n) return null;
@@ -95,16 +103,15 @@ function StreakPill() {
 }
 
 const TABS = [
-  ['#/feed', 'feed', 'tab.home', <path key="p" d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z" />],
+  HOME_ON && ['#/feed', 'feed', 'tab.home', <path key="p" d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z" />],
   ['#/', 'session', 'tab.session', <path key="p" d="M4 20 10 6l4 7 2-3 4 10Z" />],
   null, // câmera
-  ['#/history', 'history', 'tab.history', [<rect key="r" x={4} y={5} width={16} height={15} rx={2} />, <path key="p" d="M4 10h16M9 3v4M15 3v4" />]],
   ['#/me', 'profile', 'tab.profile', [<circle key="c" cx={12} cy={8} r={4} />, <path key="p" d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7Z" />]],
 ];
 function TabBar({ hidden, tab }) {
   return (
-    <nav className="tabbar" id="tabbar" hidden={hidden}>
-      {TABS.map((x) => (x
+    <nav className="tabbar" id="tabbar" hidden={hidden} style={{ gridTemplateColumns: `repeat(${TABS.filter((x) => x !== false).length}, 1fr)` }}>
+      {TABS.filter((x) => x !== false).map((x) => (x
         ? <a key={x[1]} href={x[0]} data-tab={x[1]} aria-label={t(x[2])} aria-current={tab === x[1] ? 'page' : undefined}><svg viewBox="0 0 24 24" aria-hidden="true">{x[3]}</svg></a>
         : (
           <label key="cam" className="tab-cam" id="tab-cam" aria-label={t('cam.label')}>

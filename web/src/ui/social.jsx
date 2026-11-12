@@ -11,7 +11,8 @@ import { openSheet } from '../session.js';
 import { setNav } from './climb.jsx';
 import { ClimbStage, WithNav } from './photo.jsx';
 import { useStore, useRedraw, Seg, Swatch, FadeImg, lqipBg } from './base.jsx';
-import { Icon, LineIcon } from './game.jsx';
+import { Icon, LineIcon, streakSheet } from './game.jsx';
+import { historyUi } from './history.jsx';
 
 const closeSheet = () => $('#sheet').close();
 
@@ -370,9 +371,13 @@ export function User({ handle, isTab = false }) {
       {u.stats
         ? <>
           <div className="kpis">
-            {[[u.stats.sessions, t('profile.sessions')], [u.stats.sends, t('profile.sends')],
-              [u.stats.maxGrade == null ? '—' : grade(u.stats.maxGrade), t('profile.max')], [u.stats.streak, t('streak.weeks')]]
-              .map(([v, l]) => <div key={l} className="kpi"><b>{v}</b><span>{l}</span></div>)}
+            {[[u.stats.sessions, t('profile.sessions'), () => { Object.assign(historyUi, { tab: 'sessions', day: null }); location.hash = '#/history'; }],
+              [u.stats.sends, t('profile.sends'), () => { Object.assign(historyUi, { tab: 'gallery', result: '', color: '' }); location.hash = '#/history'; }],
+              [u.stats.maxGrade == null ? '—' : grade(u.stats.maxGrade), t('profile.max'), () => { location.hash = '#/progress'; }],
+              [u.stats.streak, t('streak.weeks'), streakSheet]]
+              .map(([v, l, go]) => (u.me
+                ? <button key={l} type="button" className="kpi kpi-link" onClick={go}><b>{v}</b><span>{l} ›</span></button>
+                : <div key={l} className="kpi"><b>{v}</b><span>{l}</span></div>))}
           </div>
           <h2>{t('profile.history')}</h2>
           {u.climbs.length > 0 && <Seg options={STATUS_FILTERS.map((f) => [f, t(`status.filter.${f}`)])} value={filter} onPick={pick} />}
