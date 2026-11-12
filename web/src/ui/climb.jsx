@@ -8,8 +8,7 @@ import { playResult } from '../sound.js';
 import * as S from '../stats.js';
 import {
   PHOTO_TERMS_VERSION, HOLD_TYPES, WALL_ANGLES, STYLE_TAGS, RESULTS, $, state, toast, fail, sessionsText, colorName, grade,
-  guestMode, api, publicApi, loadAll, activeSession, gymOf, climbOf, rootOf, upsert, toCanvas, encode, compress, upload,
-} from '../core.js';
+  guestMode, api, publicApi, loadAll, activeSession, gymOf, climbOf, rootOf, upsert, toCanvas, encode, compress, upload, myXp } from '../core.js';
 import { render, needAccount } from '../app.js';
 import { PIN_ICON, PENCIL_ICON, CHECK_ICON, SHARE_ICON } from '../game.js';
 import { openSheet } from '../session.js';
@@ -103,13 +102,13 @@ function QuickLog({ s }) {
   const save = async () => {
     setBusy(true);
     const before = S.achievements(state.sessions, state.climbs);
-    const lvBefore = S.level(S.totalXp(state.climbs)).level;
+    const lvBefore = S.level(myXp()).level;
     try {
       const { climb } = await api('/climbs', { method: 'POST', body: { sessionId: s.id, color, grade: g, attempts: 1, result } });
       track('climb_logged', { result, grade: g, color, photo: false, quick: true });
       state.climbs.push(climb);
       closeSheet();
-      const lvAfter = S.level(S.totalXp(state.climbs)).level;
+      const lvAfter = S.level(myXp()).level;
       celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result });
       render();
       if (guestMode) setTimeout(needAccount, 1600);
@@ -297,7 +296,7 @@ function NewClimbForm({ s }) {
         ...(lqip ? { lqip } : {}),
       };
       const before = S.achievements(state.sessions, state.climbs);
-      const lvBefore = S.level(S.totalXp(state.climbs)).level;
+      const lvBefore = S.level(myXp()).level;
       const { climb, uploads } = await api('/climbs', { method: 'POST', body });
       if (uploads) climb.thumbUrl = URL.createObjectURL(thumb); // mostra a foto local já
       track('climb_logged', {
@@ -309,7 +308,7 @@ function NewClimbForm({ s }) {
       });
       state.climbs.push(climb);
       const unlocked = S.newAchievements(before, S.achievements(state.sessions, state.climbs));
-      const lvAfter = S.level(S.totalXp(state.climbs)).level;
+      const lvAfter = S.level(myXp()).level;
       setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result }), 50);
       location.replace(`#/climb/${climb.id}`); // sem voltar para o formulário
       if (guestMode) setTimeout(needAccount, 1600); // depois da comemoração
@@ -480,11 +479,11 @@ export function ClimbView({ id }) {
     const body = { sessionId: s.id, color: r.color, grade: r.grade, attempts: 1, result, projectId: r.id };
     track('project_try', { result, grade: r.grade });
     const before = S.achievements(state.sessions, state.climbs);
-    const lvBefore = S.level(S.totalXp(state.climbs)).level;
+    const lvBefore = S.level(myXp()).level;
     // Registro provisório para a tela reagir já; troca pelo do servidor quando ele responder.
     const temp = { ...body, id: `tmp${Date.now()}`, createdAt: new Date().toISOString() };
     state.climbs.push(temp);
-    const lvAfter = S.level(S.totalXp(state.climbs)).level;
+    const lvAfter = S.level(myXp()).level;
     celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(temp), levelUp: lvAfter > lvBefore ? lvAfter : 0, result });
     draw();
     try {

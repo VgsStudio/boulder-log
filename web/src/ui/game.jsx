@@ -3,7 +3,7 @@ import { useId } from 'react';
 import { fmtDate, fmtDuration, lang, t } from '../i18n.js';
 import { playResult } from '../sound.js';
 import * as S from '../stats.js';
-import { state, grade, gymOf, toast } from '../core.js';
+import { state, grade, gymOf, toast, myXp } from '../core.js';
 import { openSheet } from '../session.js';
 import { ICONS, HOLD_SHAPES, HOLD_COLORS, KIND_COLOR, TICK, achLabel, achValue, achCatalog } from '../game.js';
 import { Bar } from './base.jsx';
@@ -58,7 +58,7 @@ export function Hero() {
   const dots = S.weekDots(state.sessions);
   const wd = weekdayNames();
   const today = (new Date().getDay() + 6) % 7;
-  const lv = S.level(S.totalXp(state.climbs));
+  const lv = S.level(myXp());
   return (
     <section className={`hero ${n ? 'on' : ''}`}>
       <div className="hero-top">

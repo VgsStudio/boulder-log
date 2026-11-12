@@ -318,6 +318,7 @@ async function blockedEither(a: string, b: string) {
   return !!(x.Item || y.Item);
 }
 const FEED_PAGE = 20;
+const FEEDBACK_XP = 50;
 const MAX_FEED_FRIENDS = 100;
 
 // ---------- cota diária de IA (contadores atômicos: por conta e do app inteiro) ----------
@@ -606,7 +607,18 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       };
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       log('feedback', { stars: item.stars, hasComment: !!item.comment });
-      return json(201, { ok: true });
+      // Primeira avaliação vale XP (uma vez só por conta).
+      let xp = 0;
+      try {
+        await ddb.send(new UpdateCommand({
+          TableName: TABLE, Key: { pk, sk: 'SETTINGS' },
+          UpdateExpression: 'SET fbXp = :t, bonusXp = if_not_exists(bonusXp, :z) + :b',
+          ConditionExpression: 'attribute_not_exists(fbXp)',
+          ExpressionAttributeValues: { ':t': nowIso(), ':z': 0, ':b': FEEDBACK_XP },
+        }));
+        xp = FEEDBACK_XP;
+      } catch (e) { if ((e as Error).name !== 'ConditionalCheckFailedException') throw e; }
+      return json(201, { ok: true, xp });
     }
     case 'DELETE /api/account': {
       // Confirmação explícita no corpo (o app pede para digitar a palavra).

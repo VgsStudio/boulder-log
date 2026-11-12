@@ -72,6 +72,8 @@ export function debounce(fn, ms) {
   let tm;
   return (...a) => { clearTimeout(tm); tm = setTimeout(() => fn(...a), ms); };
 }
+/** XP total: o dos boulders mais os bônus (ex.: avaliar o app). */
+export const myXp = () => S.totalXp(state.climbs) + Number(state.settings.bonusXp ?? 0);
 export const sessionsText = (n) => (n === 1 ? t('unit.session1') : t('unit.sessions', { n }));
 export const colorName = (c) => t(`color.${c}`);
 export const grade = (g) => S.gradeLabel(g, state.settings.scale);

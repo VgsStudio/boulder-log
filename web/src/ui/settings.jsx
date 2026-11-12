@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, lang, langChoice, setLang, t } from '../i18n.js';
 import { playResult, setSound, soundOn } from '../sound.js';
 import * as S from '../stats.js';
-import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce } from '../core.js';
+import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce, myXp } from '../core.js';
+import { celebrate } from './game.jsx';
 import { render, showAuth } from '../app.js';
 import { SHARE_ICON } from '../game.js';
 import { openSheet } from '../session.js';
@@ -317,17 +318,23 @@ function Feedback({ auto, rated }) {
   const send = async () => {
     setBusy(true);
     try {
-      await api('/feedback', { method: 'POST', body: { stars, comment: comment.trim(), lang } });
-      track('feedback_sent', { stars });
+      const before = S.level(myXp()).level;
+      const r = await api('/feedback', { method: 'POST', body: { stars, comment: comment.trim(), lang } });
+      track('feedback_sent', { stars, xp: r.xp ?? 0 });
       fbLater(60);
       closeSheet();
-      toast(t('fb.thanks'));
+      if (r.xp) {
+        state.settings = { ...state.settings, bonusXp: Number(state.settings.bonusXp ?? 0) + r.xp, fbXp: new Date().toISOString() };
+        const after = S.level(myXp()).level;
+        celebrate({ unlocked: [], xp: r.xp, levelUp: after > before ? after : 0, result: 'sent' });
+        render();
+      } else toast(t('fb.thanks'));
     } catch (err) { fail(err); setBusy(false); }
   };
   return (
     <div className="stack">
       <h2>{t('fb.title')}</h2>
-      <p className="muted">{t('fb.lead')}</p>
+      <p className="muted">{t('fb.lead')}{!state.settings.fbXp && <strong> {t('fb.xp')}</strong>}</p>
       <div className="stars" role="radiogroup" aria-label={t('fb.title')}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button key={n} type="button" role="radio" aria-checked={String(stars === n)} aria-label={t('fb.star', { n })} className={n <= stars ? 'on' : undefined}
