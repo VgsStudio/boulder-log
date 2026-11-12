@@ -88,7 +88,9 @@ export function boxLab(rgba, W, H, b) {
     const lab = rgbToLab([inner[i], inner[i + 1], inner[i + 2]]);
     if (Math.hypot(lab[0] - wall[0], lab[1] - wall[1], lab[2] - wall[2]) > 18) hold.push(inner[i], inner[i + 1], inner[i + 2], 255);
   }
-  return sampleLab(hold.length >= inner.length * 0.15 ? hold : inner);
+  // Quase nada difere da parede: provavelmente é parede lisa, não agarra.
+  b.plain = hold.length < inner.length * 0.15;
+  return sampleLab(b.plain ? inner : hold);
 }
 
 // Distância em LCh: a luz do ginásio muda muito a luminosidade (L) e a saturação (C),

@@ -129,9 +129,10 @@ export function routeHolds(boxes, seed, width, height, maxGap = 0.18, tolerance 
     ? Math.hypot((a[0] - c[0]) / 1.6, a[1] - c[1], a[2] - c[2]) <= 15
     : colorDistance(a, c) <= tolerance);
   const similar = (b) => (b.lab && seed.lab ? near(b.lab, seed.lab) : b.color === seed.color);
-  // Caixas minúsculas (adesivos, etiquetas de grau, parafusos) não entram sozinhas na via.
-  const tiny = (b) => b.w * b.h < 0.00025;
-  const left = new Set(boxes.filter((b) => b !== seed && !tiny(b) && similar(b)));
+  // Fora: caixas minúsculas (adesivos, etiquetas de grau, parafusos) e caixas sem contraste com
+  // a parede em volta (pedaço de parede lisa que o detector confundiu com agarra; ver boxLab).
+  const junk = (b) => b.w * b.h < 0.00025 || b.plain;
+  const left = new Set(boxes.filter((b) => b !== seed && !junk(b) && similar(b)));
   const route = [seed];
   for (let i = 0; i < route.length; i++) {
     for (const b of left) if (gap(route[i], b) <= maxGap) { left.delete(b); route.push(b); }

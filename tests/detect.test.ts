@@ -37,3 +37,11 @@ test('toque perto da caixa conta; região cresce onde o detector não viu nada',
   assert.ok(g && Math.abs(g.x - 0.5) < 0.02 && Math.abs(g.w - 0.3) < 0.03 && Math.abs(g.h - 0.2) < 0.03, JSON.stringify(g));
   assert.equal(growRegion(rgba, W, H, 0.1, 0.1), null); // parede: vaza → null
 });
+
+test('routeHolds ignora pedaço de parede lisa (sem contraste)', () => {
+  const lab: [number, number, number] = [50, 0, -40];
+  const seed = { x: 0.1, y: 0.5, w: 0.05, h: 0.05, lab };
+  const wall = { x: 0.1, y: 0.4, w: 0.05, h: 0.05, lab, plain: true };
+  const hold = { x: 0.1, y: 0.3, w: 0.05, h: 0.05, lab };
+  assert.deepEqual(routeHolds([seed, wall, hold], seed, 1000, 1000), [seed, hold]);
+});
