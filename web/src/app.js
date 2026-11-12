@@ -2327,7 +2327,7 @@ function pushSheet() {
     h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow'))));
 }
 
-/** Bloco dos Ajustes: liga/desliga, horário (automático ou fixo) e "enviar teste". */
+/** Bloco dos Ajustes: liga/desliga e horário (automático ou fixo). */
 function pushSettings() {
   const box = h('div', { class: 'stack push-settings' });
   const st = state.settings;
@@ -2354,13 +2354,6 @@ function pushSettings() {
             },
             h('option', { value: '', selected: st.pushHour == null }, t('push.auto')),
             [...Array(16)].map((_, i) => i + 7).map((hh) => h('option', { value: String(hh), selected: st.pushHour === hh }, `${hh}h`)))),
-          on && h('button', {
-            class: 'btn block', type: 'button',
-            onclick: async (e) => {
-              e.currentTarget.disabled = true;
-              try { const r = await api('/push/test', { method: 'POST' }); draw(r.sent ? t('push.testSent') : t('push.testNone')); } catch (err) { fail(err); e.target.disabled = false; }
-            },
-          }, t('push.test')),
           msg && h('p', { class: 'small muted' }, msg),
         ]);
   };
@@ -2463,7 +2456,8 @@ window.addEventListener('scroll', debounce(() => {
 function render() {
   timers.forEach(clearInterval);
   timers = [];
-  const hash = location.hash || '#/';
+  // Abre na Home; com sessão aberta (ou sem conta), na Sessão.
+  const hash = location.hash || (guestMode || activeSession() ? '#/' : '#/feed');
   const [re, fn, tab] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
   wantScroll = history.state?.y ?? 0;
   view.replaceChildren(fn(...(hash.match(re)?.slice(1) ?? [])));

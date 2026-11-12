@@ -589,8 +589,6 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         lang: b.lang === undefined ? undefined : oneOf(['pt', 'en'] as const, b.lang, 'lang'),
       }));
     }
-    case 'POST /api/push/test':
-      return json(200, await sendDaily(sub, { force: true }));
 
     case 'POST /api/feedback': {
       // Avaliação do app: uma por pessoa por dia (reenviar no mesmo dia substitui). Lida pelo dono do app.

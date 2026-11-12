@@ -185,15 +185,39 @@ export function dailyMessage(sessions: Record<string, any>[], climbs: Record<str
         ? { title: `✅ ${N}, semana garantida!`, body: sends ? `Já são ${sends} vias mandadas. Mais uma sessão rende XP extra.` : 'Mais uma sessão rende XP extra.', url: '/#/' }
         : { title: `✅ ${N}, week secured!`, body: sends ? `${sends} sends so far. One more session earns extra XP.` : 'One more session earns extra XP.', url: '/#/' });
     }
-    // A mais urgente quase sempre; às vezes a segunda, para não repetir todo dia.
-    return options[day % 3 === 2 && options.length > 1 ? 1 : 0];
+    // Variadas: só entram em alguns dias, para o lembrete não ficar repetido (custo zero: continua 1 por dia).
+    const extras: Msg[] = [];
+    const last = sessions.length ? new Date(sessions[sessions.length - 1].startedAt) : null;
+    const idle = last ? Math.floor((now.getTime() - last.getTime()) / 86400_000) : 0;
+    if (idle >= 4) extras.push(pt
+      ? { title: `⏳ ${N}, já são ${idle} dias sem parede`, body: 'Seus dedos estão sentindo falta da magnésio.', url: '/#/' }
+      : { title: `⏳ ${N}, ${idle} days without the wall`, body: 'Your fingers miss the chalk.', url: '/#/' });
+    const max = Math.max(-1, ...climbs.filter(isSend).map((c) => Number(c.grade)));
+    if (max >= 0 && max < 17) extras.push(pt
+      ? { title: `📈 ${N}, seu máximo é ${g(max)}`, body: `Que tal tentar um ${g(max + 1)} hoje? Projeto novo, XP novo.`, url: '/#/' }
+      : { title: `📈 ${N}, your max is ${g(max)}`, body: `Try a ${g(max + 1)} today? New project, new XP.`, url: '/#/' });
+    if (sends >= 3) {
+      const next = Math.ceil((sends + 1) / 5) * 5;
+      extras.push(pt
+        ? { title: `🏆 ${N}, ${sends} vias mandadas até aqui`, body: `Faltam ${next - sends} pra chegar em ${next}. Bora?`, url: '/#/progress' }
+        : { title: `🏆 ${N}, ${sends} sends so far`, body: `${next - sends} more to reach ${next}. Let's go?`, url: '/#/progress' });
+    }
+    extras.push(pt
+      ? { title: `🤝 ${N}, chama alguém pra escalar hoje?`, body: 'Escalar junto rende mais (e vale ranking da semana).', url: '/#/feed' }
+      : { title: `🤝 ${N}, bring a friend to climb today?`, body: 'Climbing together goes further (and counts for the weekly ranking).', url: '/#/feed' });
+    // Sequência em risco no fim de semana sempre vence. Nos outros dias, a mais importante na maioria das vezes,
+    // às vezes a segunda e, 1 dia em 4, uma das variadas.
+    if (options[0].title.startsWith('🔥')) return options[0];
+    const r = day % 4;
+    if (r === 3) return extras[Math.floor(day / 4) % extras.length];
+    return options[r === 2 && options.length > 1 ? 1 : 0];
   } finally {
     if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz;
   }
 }
 
-/** Monta e envia a mensagem do dia de uma pessoa (o agendamento e o "testar" usam isto). */
-export async function sendDaily(sub: string, { force = false } = {}) {
+/** Monta e envia a mensagem do dia de uma pessoa (o agendamento usa isto). */
+export async function sendDaily(sub: string) {
   const q = (prefix: string) => ddb.send(new QueryCommand({
     TableName: TABLE, KeyConditionExpression: 'pk = :p AND begins_with(sk, :s)', ExpressionAttributeValues: { ':p': pkOf(sub), ':s': prefix },
   })).then((r) => r.Items ?? []);
@@ -204,14 +228,14 @@ export async function sendDaily(sub: string, { force = false } = {}) {
   ]);
   const tz = st.pushTz ?? 'America/Sao_Paulo';
   const today = localParts(tz).ymd;
-  if (!force && (st.pushOn === false || st.lastPushDay === today)) return { sent: 0, reason: 'skip' };
+  if (st.pushOn === false || st.lastPushDay === today) return { sent: 0, reason: 'skip' };
   const name = String(prof?.name ?? '').trim().split(/\s+/)[0] ?? '';
   const sorted = [...sessions].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
   const msg = dailyMessage(sorted, climbs.map((c) => ({ ...c, id: String(c.sk).split('#')[1] })), st, { name, lang: st.pushLang === 'en' ? 'en' : 'pt', tz, now: new Date() })
-    ?? (force ? { title: st.pushLang === 'en' ? `🧗 ${name || 'Hey'}, notifications are on!` : `🧗 ${name || 'Ei'}, as notificações estão ligadas!`, body: st.pushLang === 'en' ? "You'll get one reminder a day, close to when you usually climb." : 'Você vai receber um lembrete por dia, perto do horário em que costuma escalar.', url: '/#/' } : null);
+;
   if (!msg) return { sent: 0, reason: 'climbed-today' };
   const sent = await pushTo(sub, { ...msg, tag: 'daily' });
-  if (!force) await ddb.send(new UpdateCommand({ TableName: TABLE, Key: { pk: pkOf(sub), sk: 'SETTINGS' }, UpdateExpression: 'SET lastPushDay = :d', ExpressionAttributeValues: { ':d': today } }));
+  await ddb.send(new UpdateCommand({ TableName: TABLE, Key: { pk: pkOf(sub), sk: 'SETTINGS' }, UpdateExpression: 'SET lastPushDay = :d', ExpressionAttributeValues: { ':d': today } }));
   return { sent, title: msg.title };
 }
 
