@@ -29,8 +29,9 @@
   line-height: 1.45;
   -webkit-text-size-adjust: 100%;
 }
+/* Escuro: segue o aparelho, a menos que a pessoa escolha nos Ajustes (data-theme no <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f1226;
     --surface: #1a1e3a;
     --surface-2: #252a4d;
@@ -43,6 +44,20 @@
     --orange-soft: #3a2418;
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #0f1226;
+    --surface: #1a1e3a;
+    --surface-2: #252a4d;
+    --line: #2e3460;
+    --text: #eef0ff;
+    --muted: #9aa0c8;
+    --blue: #5b7cff;
+    --blue-deep: #3352d6;
+    --blue-soft: #232b5c;
+    --orange-soft: #3a2418;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { background: var(--bg); }
@@ -259,7 +274,10 @@ details.session .list { margin-top: 8px; }
 .node-meta { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-weight: 800; font-size: .85rem; }
 .node-meta .ico { width: 15px; height: 15px; }
 .path li.mastered .node-meta { color: var(--green-deep); }
-@media (prefers-color-scheme: dark) { .path li.mastered .node-meta { color: var(--green); } }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .path li.mastered .node-meta { color: var(--green); }
+}
+:root[data-theme="dark"] .path li.mastered .node-meta { color: var(--green); }
 
 /* Conquistas: medalhas em forma de agarra */
 .achs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 14px; }
@@ -280,7 +298,10 @@ details.session .list { margin-top: 8px; }
 .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
 .top .row { gap: 4px; }
 .streak-pill { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 12px; background: var(--orange-soft); color: var(--orange-deep); font-family: var(--display); font-weight: 900; }
-@media (prefers-color-scheme: dark) { .streak-pill { color: var(--orange); } }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .streak-pill { color: var(--orange); }
+}
+:root[data-theme="dark"] .streak-pill { color: var(--orange); }
 .streak-pill .ico { width: 17px; height: 17px; fill: currentColor; stroke: none; }
 p.small .ico { display: inline; width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
 
@@ -398,10 +419,13 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -2.2 1.15'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.13'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: light) {
-  body { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .6 0 0 0 0 .7 0 0 0 -2.2 1.15'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E"); }
-  .chalk-stroke { stroke: #ffffff; }
-  .brand-mark .chalk-stroke { stroke: var(--text); }
+  :root:not([data-theme="dark"]) body { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .6 0 0 0 0 .7 0 0 0 -2.2 1.15'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E"); }
+  :root:not([data-theme="dark"]) .chalk-stroke { stroke: #ffffff; }
+  :root:not([data-theme="dark"]) .brand-mark .chalk-stroke { stroke: var(--text); }
 }
+:root[data-theme="light"] body { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .6 0 0 0 0 .7 0 0 0 -2.2 1.15'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E"); }
+:root[data-theme="light"] .chalk-stroke { stroke: #ffffff; }
+:root[data-theme="light"] .brand-mark .chalk-stroke { stroke: var(--text); }
 
 /* Comemoração: visto riscado + pó subindo. */
 .burst { position: relative; width: 120px; height: 120px; margin: 0 auto -6px; }

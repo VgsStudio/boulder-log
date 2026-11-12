@@ -4,7 +4,7 @@ document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
 
 const dict = {
   pt: {
-    'tab.session': 'Sessão', 'tab.history': 'Histórico', 'tab.progress': 'Evolução', 'tab.friends': 'Amigos',
+    'tab.session': 'Sessão', 'tab.history': 'Histórico', 'tab.progress': 'Evolução', 'tab.friends': 'Amigos', 'settings.theme': 'Tema', 'settings.themeAuto': 'Automático', 'settings.themeLight': 'Claro', 'settings.themeDark': 'Escuro',
     'zoom.reset': 'Ver foto inteira',
     'profile.create': 'Criar meu perfil', 'profile.edit': 'Editar perfil', 'profile.lead': 'Com perfil, seus amigos te acham pelo @, vocês se seguem e entram no ranking da semana.',
     'profile.photo': 'Escolher foto de perfil', 'profile.name': 'Nome', 'profile.handle': 'Usuário', 'profile.handleRule': '3 a 20 caracteres: letras minúsculas, números, ponto ou _.',
@@ -79,7 +79,7 @@ const dict = {
     'style.technical': 'Técnico', 'style.coordination': 'Coordenação', 'style.heel_hook': 'Calcanhar', 'style.toe_hook': 'Peito de pé', 'style.mantle': 'Mantle',
   },
   en: {
-    'tab.session': 'Session', 'tab.history': 'History', 'tab.progress': 'Progress', 'tab.friends': 'Friends',
+    'tab.session': 'Session', 'tab.history': 'History', 'tab.progress': 'Progress', 'tab.friends': 'Friends', 'settings.theme': 'Theme', 'settings.themeAuto': 'Automatic', 'settings.themeLight': 'Light', 'settings.themeDark': 'Dark',
     'zoom.reset': 'Show whole photo',
     'profile.create': 'Create my profile', 'profile.edit': 'Edit profile', 'profile.lead': 'With a profile, friends find you by your @, you follow each other and join the weekly ranking.',
     'profile.photo': 'Choose profile photo', 'profile.name': 'Name', 'profile.handle': 'Username', 'profile.handleRule': '3 to 20 characters: lowercase letters, numbers, dot or _.',

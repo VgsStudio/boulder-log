@@ -15,6 +15,23 @@ const STYLE_TAGS = ['dynamic', 'static', 'compression', 'balance', 'power', 'tec
 const RESULTS = ['flash', 'sent', 'project'];
 
 const $ = (s) => document.querySelector(s);
+
+// ---------- tema: automático (segue o aparelho), claro ou escuro ----------
+const THEME_COLORS = { light: '#eef1f6', dark: '#0f1226' };
+const getTheme = () => { try { return localStorage.getItem('cm:theme') || 'auto'; } catch { return 'auto'; } };
+function applyTheme(theme = getTheme()) {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  // Barra do navegador acompanha a escolha.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
+    m.content = theme === 'auto' ? THEME_COLORS[m.media.includes('dark') ? 'dark' : 'light'] : THEME_COLORS[theme];
+  });
+}
+function setTheme(theme) {
+  try { if (theme === 'auto') localStorage.removeItem('cm:theme'); else localStorage.setItem('cm:theme', theme); } catch {}
+  applyTheme(theme);
+}
+applyTheme();
 const view = $('#view');
 let cfg;
 const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, profile: null, loadedAt: 0 };
@@ -1470,6 +1487,8 @@ function settingsSheet() {
     h('h2', {}, t('settings.title')),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.scale')),
       seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; draw(); })),
+    h('div', {}, h('div', { class: 'small muted' }, t('settings.theme')),
+      seg([['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]], getTheme(), (v) => { setTheme(v); draw(); })),
     h('div', {}, h('div', { class: 'small muted' }, t('settings.sound')),
       seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') playSent(); draw(); })),
     h('h2', {}, t('settings.goals')),
