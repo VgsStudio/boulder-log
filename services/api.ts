@@ -27,6 +27,10 @@ const URL_SECONDS = 3600;
 // @usuário: minúsculas, números, ponto e sublinhado.
 const HANDLE_RE = /^[a-z0-9_.]{3,20}$/;
 const MAX_AVATAR = 300 * 1024;
+// Tetos contra abuso (cadastro é aberto): ginásios por conta, pessoas seguidas, páginas de Scan.
+const MAX_GYMS = 20;
+const MAX_FOLLOWING = 500;
+const MAX_SCAN_PAGES = 10;
 
 // ---------- validação (fronteira de confiança: só passa o que está na lista) ----------
 const bad = (field: string): never => { throw new HttpError(400, `INVALID_${field.toUpperCase()}`); };
@@ -308,6 +312,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       return json(200, (await queryAll(pk, 'GYM#')).map(pub));
     case 'POST /api/gyms': {
       const b = body();
+      if ((await queryAll(pk, 'GYM#')).length >= MAX_GYMS) throw new HttpError(409, 'TOO_MANY_GYMS');
       const item = { pk, sk: `GYM#${newId()}`, name: str(b.name, 40, 'name') || bad('name'), palette: b.palette ? cleanPalette(b.palette) : {}, loc: b.loc ? cleanLoc(b.loc) : undefined, createdAt: nowIso() };
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       return json(201, pub(item));
@@ -317,7 +322,11 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const f: Record<string, unknown> = {};
       if (b.name !== undefined) f.name = str(b.name, 40, 'name') || bad('name');
       if (b.palette !== undefined) f.palette = cleanPalette(b.palette);
-      if (b.loc !== undefined) f.loc = cleanLoc(b.loc);
+      if (b.loc !== undefined) {
+        // Local do ginásio só é gravado uma vez (o app nunca move): impede usar o ginásio como sonda de localização.
+        if ((await getItem(pk, `GYM#${id(pid, 'id')}`)).loc) bad('loc');
+        f.loc = cleanLoc(b.loc);
+      }
       return json(200, pub(await patch(pk, `GYM#${id(pid, 'id')}`, f)));
     }
 
@@ -409,6 +418,8 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
     }
     case 'POST /api/shares/{id}/accept': {
       const sh = await getShare(pid);
+      const already = (await queryAll(pk, 'CLIMB#')).find((c) => c.sharedFrom === pid);
+      if (already) return json(200, await withThumb(sub, already));
       // Entra como projeto ainda não tentado (sem sessão); a foto é copiada para a conta de quem aceitou.
       const climb = await copyClimb(sub, sh.ownerSub as string, sh.climbId as string, sh, { sharedFrom: pid });
       log('share.accepted', { share: String(pid).slice(0, 4) });
@@ -461,14 +472,16 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       if (q.length < 2) return json(200, []);
       const found: Record<string, unknown>[] = [];
       let ExclusiveStartKey: Record<string, unknown> | undefined;
+      let pages = 0;
       do {
         const out = await ddb.send(new ScanCommand({
           TableName: TABLE, FilterExpression: 'sk = :p AND contains(#s, :q)',
-          ExpressionAttributeNames: { '#s': 'search' }, ExpressionAttributeValues: { ':p': 'PROFILE', ':q': q }, ExclusiveStartKey,
+          ProjectionExpression: 'pk, #h, #n, avatarType',
+          ExpressionAttributeNames: { '#s': 'search', '#h': 'handle', '#n': 'name' }, ExpressionAttributeValues: { ':p': 'PROFILE', ':q': q }, ExclusiveStartKey,
         }));
         found.push(...(out.Items ?? []));
         ExclusiveStartKey = out.LastEvaluatedKey;
-      } while (ExclusiveStartKey && found.length < 20);
+      } while (ExclusiveStartKey && found.length < 20 && ++pages < MAX_SCAN_PAGES);
       const following = new Set(await followsOf(sub, 'FOLLOWS#'));
       return json(200, await Promise.all(found.filter((p) => subOfPk(p.pk) !== sub).slice(0, 20)
         .map(async (p) => ({ ...(await card(p)), following: following.has(subOfPk(p.pk)) }))));
@@ -520,6 +533,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       if (!(await profileOf(sub))) throw new HttpError(409, 'NO_PROFILE');
       const keys = [{ pk, sk: `FOLLOWS#${them}` }, { pk: pkOf(them), sk: `FOLLOWER#${sub}` }];
       const on = event.routeKey.startsWith('POST');
+      if (on && (await followsOf(sub, 'FOLLOWS#')).length >= MAX_FOLLOWING) throw new HttpError(409, 'TOO_MANY_FOLLOWING');
       const at = nowIso();
       await ddb.send(new TransactWriteCommand({
         TransactItems: on
@@ -543,8 +557,10 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const [following, followers, myClimbs, myGyms] = await Promise.all([
         followsOf(sub, 'FOLLOWS#'), followsOf(sub, 'FOLLOWER#'), queryAll(pk, 'CLIMB#'), queryAll(pk, 'GYM#'),
       ]);
-      const ranked = await Promise.all([sub, ...following].map(async (u) => ({ u, xp: totalXp(await climbsSince(u, since)) })));
-      const people = new Map((await profilesOf([sub, ...following])).map((p) => [subOfPk(p.pk), p]));
+      const followerSet = new Set(followers);
+      const friends = following.filter((u) => followerSet.has(u));
+      const ranked = await Promise.all([sub, ...friends].map(async (u) => ({ u, xp: totalXp(await climbsSince(u, since)) })));
+      const people = new Map((await profilesOf([sub, ...friends])).map((p) => [subOfPk(p.pk), p]));
       const ranking = await Promise.all(ranked.filter((r) => people.has(r.u)).sort((a, b) => b.xp - a.xp)
         .map(async (r) => ({ ...(await card(people.get(r.u)!)), weekXp: r.xp, me: r.u === sub })));
 
@@ -554,23 +570,25 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const add = (u: string, reason: string) => { if (!skip.has(u) && !why.has(u)) why.set(u, reason); };
       followers.forEach((u) => add(u, 'followsYou'));
       myClimbs.forEach((c) => { if (c.sharedBy) add(c.sharedBy as string, 'sharedWithYou'); });
-      for (const f of following.slice(0, 20)) (await followsOf(f, 'FOLLOWS#')).forEach((u) => add(u, `via:${f}`));
+      for (const f of friends.slice(0, 20)) (await followsOf(f, 'FOLLOWS#')).forEach((u) => add(u, `via:${f}`));
       const locs = myGyms.filter((g) => g.loc).map((g) => g.loc as { lat: number; lon: number });
       if (locs.length && why.size < 12) {
         // ponytail: Scan nos ginásios de todo mundo; com muitos usuários, geohash num índice.
         let ExclusiveStartKey: Record<string, unknown> | undefined;
+        let pages = 0;
         do {
           const out = await ddb.send(new ScanCommand({
             TableName: TABLE, FilterExpression: 'begins_with(sk, :g) AND attribute_exists(loc)',
-            ExpressionAttributeValues: { ':g': 'GYM#' }, ProjectionExpression: 'pk, loc, #n', ExpressionAttributeNames: { '#n': 'name' }, ExclusiveStartKey,
+            ExpressionAttributeValues: { ':g': 'GYM#' }, ProjectionExpression: 'pk, loc', ExclusiveStartKey,
           }));
-          for (const g of out.Items ?? []) if (locs.some((l) => distanceKm(l, g.loc) <= 0.5)) add(subOfPk(g.pk), `gym:${g.name}`);
+          // Só "treina perto de você": o nome e o ponto do ginásio da outra pessoa não saem daqui.
+          for (const g of out.Items ?? []) if (locs.some((l) => distanceKm(l, g.loc) <= 0.5)) add(subOfPk(g.pk), 'gym');
           ExclusiveStartKey = out.LastEvaluatedKey;
-        } while (ExclusiveStartKey);
+        } while (ExclusiveStartKey && ++pages < MAX_SCAN_PAGES);
       }
       const cand = [...why.keys()].slice(0, 30);
       const profs = new Map((await profilesOf(cand)).map((p) => [subOfPk(p.pk), p]));
-      const viaHandles = new Map((await profilesOf(following.slice(0, 20))).map((p) => [subOfPk(p.pk), p.handle]));
+      const viaHandles = new Map((await profilesOf(friends.slice(0, 20))).map((p) => [subOfPk(p.pk), p.handle]));
       const suggestions = await Promise.all(cand.filter((u) => profs.has(u)).slice(0, 12).map(async (u) => {
         const [kind, arg] = why.get(u)!.split(/:(.*)/);
         return { ...(await card(profs.get(u)!)), reason: kind, arg: kind === 'via' ? viaHandles.get(arg) ?? null : arg ?? null };

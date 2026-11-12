@@ -104,8 +104,9 @@ export class BoulderStack extends Stack {
     apiFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel'],
       resources: [
-        `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
-        'arn:aws:bedrock:*::foundation-model/*',
+        `arn:aws:bedrock:*:${this.account}:inference-profile/${props.aiModel}`,
+        // o perfil (us.*) roteia para o modelo de base de mesmo nome em várias regiões
+        `arn:aws:bedrock:*::foundation-model/${props.aiModel.replace(/^(us|eu|apac|global)\./, '')}`,
       ],
     }));
 
