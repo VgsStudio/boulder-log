@@ -681,3 +681,23 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .overlay rect.unpainted { stroke: #ff3d4f; stroke-width: 3; stroke-dasharray: 3 3; }
 .brush-btn { align-self: flex-start; }
 .block-link { align-self: center; margin-top: 8px; }
+
+/* Barra só com ícones; a aba ativa ganha o risco de giz embaixo do ícone */
+.tabbar a { position: relative; }
+.tabbar a svg { width: 28px; height: 28px; }
+.tabbar a[aria-current="page"]::after {
+  content: ""; position: absolute; left: 50%; bottom: 10px; width: 30px; height: 6px; margin-left: -15px; background: var(--blue);
+  -webkit-mask: var(--m-underline) center / 100% 100% no-repeat; mask: var(--m-underline) center / 100% 100% no-repeat;
+}
+
+/* Fotos: quadrado escuro pulsando → prévia borrada (~1 KB) → foto com esmaecer */
+.gallery a, .gallery button { background-color: var(--surface-2); background-size: cover; background-position: center; }
+.gallery a:not([style]):not(:has(img.in)), .gallery button:not([style]):not(:has(img.in)) { animation: skel 1.4s ease-in-out infinite; }
+@keyframes skel { 50% { opacity: .6; } }
+.gallery a[style]::before, .gallery button[style]::before { content: ""; position: absolute; inset: 0; backdrop-filter: blur(6px); }
+img.fade { opacity: 0; transition: opacity .35s; position: relative; }
+img.fade.in { opacity: 1; }
+.stage { background-image: var(--lqip, none); background-size: cover; background-position: center; }
+@media (prefers-reduced-motion: reduce) { .gallery a, .gallery button { animation: none !important; } img.fade { transition: none; } }
+.link-plain { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.link-plain:hover { text-decoration: underline; }

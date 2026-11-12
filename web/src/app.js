@@ -850,12 +850,13 @@ function viewNew() {
     btn.disabled = true;
     btn.textContent = t('climb.saving');
     try {
-      let full, thumb;
+      let full, thumb, lqip;
       if (d.canvas) {
         full = await compress(d.canvas, 0.82);
         const small = h('canvas', { width: 400, height: Math.round((400 * d.canvas.height) / d.canvas.width) });
         small.getContext('2d').drawImage(d.canvas, 0, 0, small.width, small.height);
         thumb = await encode(small, full.type, 0.75);
+        lqip = tinyPreview(d.canvas);
       }
       const body = {
         sessionId: s.id, color: d.color, grade: d.grade, attempts: d.attempts, result: d.result,
@@ -866,6 +867,7 @@ function viewNew() {
         ...(d.autoRoute?.length ? { autoHolds: d.autoRoute.slice(0, 80).map(boxOut) } : {}),
         ...(d.projectId ? { projectId: d.projectId } : {}),
         ...(full ? { photoType: full.type } : {}),
+        ...(lqip ? { lqip } : {}),
       };
       const before = S.achievements(state.sessions, state.climbs);
       const lvBefore = S.level(S.totalXp(state.climbs)).level;
@@ -1421,13 +1423,63 @@ function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null, paint = 
 /** Foto que aparece na hora: começa pela miniatura (leve) e troca pela grande quando ela chega;
  *  se a grande falhar (upload que não terminou), a miniatura fica. */
 function photoImg(full, thumb) {
-  const img = h('img', { src: thumb || full, alt: '', decoding: 'async', onerror: () => { if (img.src !== full && full) img.src = full; } });
+  const img = h('img', { src: thumb || full, alt: '', decoding: 'async', class: 'fade', onload: (e) => e.target.classList.add('in'), onerror: () => { if (img.src !== full && full) img.src = full; } });
   if (thumb && full && full !== thumb) {
     const pre = new Image();
     pre.onload = () => { img.src = full; };
     pre.src = full;
   }
   return img;
+}
+
+/** Prévia minúscula (24 px, borrada pelo CSS) em data URL: ~1 KB, vai junto do boulder e aparece na hora. */
+function tinyPreview(source) {
+  const w = 24, hh = Math.max(1, Math.round((24 * source.height) / source.width));
+  const c = h('canvas', { width: w, height: hh });
+  c.getContext('2d').drawImage(source, 0, 0, w, hh);
+  const url = c.toDataURL('image/webp', 0.5);
+  return url.startsWith('data:image/webp') && url.length < 3000 ? url : c.toDataURL('image/jpeg', 0.5);
+}
+/** Fundo com a prévia borrada para um quadro de foto (some quando a foto chega). */
+const lqipStyle = (c) => (c?.lqip ? { 'background-image': `url("${c.lqip}")` } : null);
+
+/** Boulders antigos sem prévia: gera de fundo a partir da miniatura (poucos por vez). */
+async function backfillPreviews() {
+  if (guestMode) return;
+  const todo = state.climbs.filter((c) => c.photoType && !c.lqip && c.thumbUrl).slice(0, 30);
+  for (const c of todo) {
+    try {
+      const bmp = await createImageBitmap(await (await fetch(c.thumbUrl, { cache: 'no-store' })).blob());
+      const lqip = tinyPreview(bmp);
+      bmp.close?.();
+      upsert(state.climbs, await api(`/climbs/${c.id}`, { method: 'PATCH', body: { lqip } }));
+    } catch { /* tenta de novo na próxima abertura */ }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+/** Lista de seguidores / seguindo (como no Instagram). */
+async function peopleSheet(u, type) {
+  const box = h('div', { class: 'stack' });
+  const tabs = (cur) => seg([['followers', t('profile.followers', { n: u.followers })], ['following', t('profile.following', { n: u.follows })]], cur, (v) => load(v));
+  const load = async (kind) => {
+    fill(box, tabs(kind), h('p', { class: 'small detect-status loading' }, t('friends.loading')));
+    try {
+      const people = await api(`/users/${u.handle}/people?type=${kind}`);
+      fill(box, tabs(kind),
+        people.length
+          ? h('ul', { class: 'list' }, people.map((p) => h('li', {}, h('a', { class: 'person-row', href: `#/u/${p.handle}`, onclick: () => $('#sheet').close() },
+            avatar(p), h('div', { class: 'grow' }, h('strong', {}, p.name), h('div', { class: 'muted small' }, `@${p.handle}`)),
+            !p.me && followButton(p)))))
+          : h('p', { class: 'muted' }, kind === 'followers' ? t('people.noFollowers') : t('people.noFollowing')),
+        h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')));
+    } catch (err) {
+      fill(box, tabs(kind), h('p', { class: 'muted' }, err.status === 403 ? t('people.private') : t('error.generic')),
+        h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')));
+    }
+  };
+  openSheet(box);
+  load(type);
 }
 
 // ---------- navegar entre boulders (‹ › e arrastar, como no Instagram) ----------
@@ -1459,9 +1511,10 @@ function withNav(el, hasPrev, hasNext, go) {
 const scanning = (on, el) => { if (on) el.classList.add('detecting'); return el; };
 
 /** Foto de um boulder com as agarras da via marcadas. */
-const climbStage = (url, c, onOpen) => url && stage([
+const climbStage = (url, c, onOpen) => url && withLqip(c, stage([
   photoImg(url, c.thumbUrl),
-  holdsOverlay(c.holds)], onOpen ? () => onOpen() : undefined);
+  holdsOverlay(c.holds)], onOpen ? () => onOpen() : undefined));
+const withLqip = (c, el) => { if (c?.lqip) el.style.setProperty('--lqip', `url("${c.lqip}")`); return el; };
 
 // ---------- social: perfil, amigos, ranking ----------
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
@@ -1677,7 +1730,8 @@ function viewUser(handle, isTab = false) {
         h('h1', {}, u.name), h('div', { class: 'muted' }, `@${u.handle}`),
         h('div', { class: 'row small num profile-counts' },
           h('span', { class: 'level-pill num' }, t('xp.level', { n: u.level })),
-          t('profile.counts', { a: u.followers, b: u.follows })))),
+          h('button', { class: 'link-plain', type: 'button', onclick: () => peopleSheet(u, 'followers') }, t('profile.followers', { n: u.followers })), ' · ',
+          h('button', { class: 'link-plain', type: 'button', onclick: () => peopleSheet(u, 'following') }, t('profile.following', { n: u.follows }))))),
     u.me
       ? h('div', { class: 'row' },
         h('button', { class: 'btn grow', type: 'button', onclick: async () => { if (await profileSheet()) load(); } }, t('profile.edit')),
@@ -1713,8 +1767,8 @@ function viewUser(handle, isTab = false) {
         (() => {
           const list = u.climbs.filter((c) => profileFilter === 'all' || (profileFilter === 'sent' ? ['sent', 'flash'].includes(c.status) : c.status === profileFilter));
           return list.length
-            ? h('div', { class: 'gallery' }, list.map((c) => h('button', { type: 'button', onclick: () => { setNav(list.map((x) => x.id)); if (u.me) location.hash = `#/climb/${c.id}`; else friendClimbSheet(u, c, list); } },
-              h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
+            ? h('div', { class: 'gallery' }, list.map((c) => h('button', { type: 'button', style: lqipStyle(c), onclick: () => { setNav(list.map((x) => x.id)); if (u.me) location.hash = `#/climb/${c.id}`; else friendClimbSheet(u, c, list); } },
+              h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, class: 'fade', onload: (e) => e.target.classList.add('in'), onerror: (e) => e.target.remove() }),
               c.status && h('span', { class: `status-tag s-${c.status}` }, t(`status.${c.status}`)),
               h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
             : h('p', { class: 'muted' }, t('history.empty'));
@@ -1879,13 +1933,13 @@ function viewFeed() {
     feed.loading = false; draw();
   };
   if (guestMode) {
-    fill(box, h('h1', {}, t('tab.feed')),
+    fill(box, h('h1', {}, t('tab.home')),
       h('section', { class: 'card stack' }, h('h2', {}, t('feed.guestTitle')), h('p', { class: 'muted' }, t('feed.guestLead')),
         h('button', { class: 'btn primary block', type: 'button', onclick: () => showAuth({ mode: 'signup' }) }, t('auth.signup'))),
       FEED_EXAMPLES.map((c) => feedCard(c, true)));
     return box;
   }
-  fill(box, h('h1', {}, t('tab.feed')), list, sentinel);
+  fill(box, h('h1', {}, t('tab.home')), list, sentinel);
   // Rolagem infinita: carrega a próxima página quando o fim aparece.
   const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) load(); }, { rootMargin: '600px' });
   io.observe(sentinel);
@@ -1961,8 +2015,8 @@ function viewHistory() {
             h('select', { class: 'grow', 'aria-label': t('climb.result'), onchange: (e) => { historyUi.result = e.target.value; draw(); } },
               h('option', { value: '' }, `${t('climb.result')}: ${t('history.all')}`),
               RESULTS.map((r) => h('option', { value: r, selected: historyUi.result === r }, t(`result.${r}`))))),
-          h('div', { class: 'gallery' }, gallery.map((c) => h('a', { href: `#/climb/${c.id}`, onclick: () => setNav(gallery.map((x) => x.id)) },
-            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
+          h('div', { class: 'gallery' }, gallery.map((c) => h('a', { href: `#/climb/${c.id}`, style: lqipStyle(c), onclick: () => setNav(gallery.map((x) => x.id)) },
+            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, class: 'fade', onload: (e) => e.target.classList.add('in'), onerror: (e) => e.target.remove() }),
             h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))),
     );
   };
@@ -2585,6 +2639,7 @@ function showAuth({ mode = 'login', blocked = false } = {}) {
 
 async function boot() {
   document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t)));
+  document.querySelectorAll('[data-aria]').forEach((el) => el.setAttribute('aria-label', t(el.dataset.aria)));
   $('#open-settings').setAttribute('aria-label', t('settings.title'));
   $('#open-settings').addEventListener('click', settingsSheet);
   $('#streak-pill').addEventListener('click', streakSheet);
@@ -2646,6 +2701,7 @@ async function boot() {
     if (!appTour(afterTour)) afterTour();
   }, 900);
   setTimeout(() => { if (!tourRunning) maybeAskFeedback(); }, 8000);
+  setTimeout(backfillPreviews, 5000);
   setInterval(checkAutoEnd, 5 * 60_000);
 }
 

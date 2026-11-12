@@ -33,3 +33,11 @@ test('cleanClimb: via sugerida e detector entram validados', () => {
   assert.equal(out.detector, 'yolov8n-freeclimbs-2');
   assert.throws(() => cleanClimb({ detector: 'outro' }, true));
 });
+
+test('prévia minúscula (lqip): só data URL de imagem pequena', () => {
+  const lqip = 'data:image/webp;base64,UklGRkAAAABXRUJQ';
+  assert.equal(cleanClimb({ lqip }, true).lqip, lqip);
+  assert.throws(() => cleanClimb({ lqip: 'javascript:alert(1)' }, true), /INVALID_LQIP/);
+  assert.throws(() => cleanClimb({ lqip: 'data:image/svg+xml;base64,PHN2Zz4=' }, true), /INVALID_LQIP/);
+  assert.throws(() => cleanClimb({ lqip: `data:image/webp;base64,${'A'.repeat(3000)}` }, true), /INVALID_LQIP/);
+});

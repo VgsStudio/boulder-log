@@ -66,6 +66,11 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
   // Todas as agarras que o detector achou na foto (para treinar um modelo próprio no futuro:
   // `holds` diz quais dessas são da via, corrigidas pela pessoa).
   if (has('cands')) out.cands = cleanHolds(b.cands, 300).map(({ x, y, w, h }) => ({ x, y, w, h }));
+  // Prévia minúscula da foto (~24 px, data URL) para aparecer na hora enquanto a foto carrega.
+  if (has('lqip')) {
+    if (typeof b.lqip !== 'string' || b.lqip.length > 3000 || !/^data:image\/(webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(b.lqip)) bad('lqip');
+    out.lqip = b.lqip;
+  }
   // A via que o app sugeriu antes das correções da pessoa (para medir acerto e treinar).
   if (has('autoHolds')) out.autoHolds = cleanHolds(b.autoHolds).map(({ x, y, w, h }) => ({ x, y, w, h }));
   if (has('detector')) out.detector = oneOf(['yolov8n-freeclimbs-2'] as const, b.detector, 'detector');
@@ -690,7 +695,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const photo = async (c: Record<string, unknown>) => {
         const cid = String(c.sk).split('#')[1];
         return {
-          id: cid, color: c.color, grade: c.grade, result: c.result, status: status(c, cid), createdAt: c.createdAt, holds: c.holds, tap: c.tap,
+          id: cid, color: c.color, grade: c.grade, result: c.result, status: status(c, cid), createdAt: c.createdAt, holds: c.holds, tap: c.tap, lqip: c.lqip,
           thumbUrl: c.photoType ? await signGet(photoKey(them, cid, 'thumb')) : null,
           photoUrl: c.photoType ? await signGet(photoKey(them, cid, 'full')) : null,
         };
@@ -742,6 +747,18 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         }).catch((e) => log('push.follow', { message: (e as Error).message.slice(0, 120) }));
       }
       return json(200, { following: on, followsMe: await isFollowing(them, sub) });
+    }
+    case 'GET /api/users/{handle}/people': {
+      // Seguidores / seguindo: no próprio perfil e no de amigos (mútuos); para os outros, só os números.
+      const them = await subOfHandle(event.pathParameters?.handle);
+      const kind = event.queryStringParameters?.type === 'following' ? 'FOLLOWS#' : 'FOLLOWER#';
+      if (them !== sub && !((await isFollowing(sub, them)) && (await isFollowing(them, sub)))) throw new HttpError(403, 'PRIVATE');
+      const subs = (await followsOf(them, kind)).slice(0, 500);
+      const [mine, blocked] = await Promise.all([followsOf(sub, 'FOLLOWS#').then((l) => new Set(l)), blockedBy(sub)]);
+      const profiles = (await profilesOf(subs)).filter((p) => !blocked.has(subOfPk(p.pk)));
+      return json(200, await Promise.all(profiles.map(async (p) => ({
+        ...(await card(p)), me: subOfPk(p.pk) === sub, following: mine.has(subOfPk(p.pk)),
+      }))));
     }
     case 'POST /api/users/{handle}/block':
     case 'DELETE /api/users/{handle}/block': {
@@ -797,7 +814,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         const photoOf = root?.photoType ? String(root.sk).slice(6) : null;
         return {
           id: cid, rootId: root ? String(root.sk).slice(6) : cid, owner: await card(people.get(u)!), color: c.color, grade: c.grade, result: c.result, createdAt: c.createdAt,
-          projectSend: !!c.projectId && isSend(c), holds: root?.holds ?? null,
+          projectSend: !!c.projectId && isSend(c), holds: root?.holds ?? null, lqip: root?.lqip,
           thumbUrl: photoOf ? await signGet(photoKey(u, photoOf, 'thumb')) : null,
           photoUrl: photoOf ? await signGet(photoKey(u, photoOf, 'full')) : null,
           fire: Number(c.fire ?? 0), fired: mine.has(cid),

@@ -272,7 +272,7 @@ export class BoulderStack extends Stack {
       ['/api/climbs/{id}/share', M.POST], ['/api/shares/{id}', M.GET], ['/api/shares/{id}/accept', M.POST],
       ['/api/account', M.DELETE], ['/api/feedback', M.POST],
       ['/api/climbs/{id}/share', M.DELETE], ['/api/users/{handle}/block', M.POST], ['/api/users/{handle}/block', M.DELETE],
-      ['/api/feed', M.GET], ['/api/feed/{handle}/{id}/fire', M.POST], ['/api/feed/{handle}/{id}/fire', M.DELETE],
+      ['/api/users/{handle}/people', M.GET], ['/api/feed', M.GET], ['/api/feed/{handle}/{id}/fire', M.POST], ['/api/feed/{handle}/{id}/fire', M.DELETE],
       ['/api/push/key', M.GET], ['/api/push/subscribe', M.POST], ['/api/push/unsubscribe', M.POST], ['/api/push/prefs', M.PUT], ['/api/push/test', M.POST],
       ['/api/profile', M.GET], ['/api/profile', M.PUT], ['/api/users', M.GET], ['/api/users/{handle}', M.GET],
       ['/api/users/{handle}/follow', M.POST], ['/api/users/{handle}/follow', M.DELETE],

@@ -39,21 +39,21 @@
   <main id="view" tabindex="-1"></main>
 
   <nav class="tabbar" id="tabbar" hidden>
-    <a href="#/" data-tab="session">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 10 6l4 7 2-3 4 10Z"/></svg><span data-t="tab.session"></span>
+    <a href="#/feed" data-tab="feed" data-aria="tab.home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></svg>
     </a>
-    <a href="#/history" data-tab="history">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span data-t="tab.history"></span>
+    <a href="#/" data-tab="session" data-aria="tab.session">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 10 6l4 7 2-3 4 10Z"/></svg>
     </a>
     <label class="tab-cam" id="tab-cam">
       <span class="cam-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
       <input type="file" accept="image/*" capture="environment" id="cam-input" hidden>
     </label>
-    <a href="#/feed" data-tab="feed">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="2"/><rect x="4" y="13" width="16" height="7" rx="2"/></svg><span data-t="tab.feed"></span>
+    <a href="#/history" data-tab="history" data-aria="tab.history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
     </a>
-    <a href="#/me" data-tab="profile">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7Z"/></svg><span data-t="tab.profile"></span>
+    <a href="#/me" data-tab="profile" data-aria="tab.profile">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7Z"/></svg>
     </a>
   </nav>
 
