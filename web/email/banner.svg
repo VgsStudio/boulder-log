@@ -1,48 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="600" height="240" viewBox="0 0 600 240">
-  <!-- Arte do topo dos e-mails: a fileira de agarras com check de giz da tela inicial do app,
-       subindo como uma via; a última, tracejada, é a próxima. Fonte do banner.png (resvg, 1200 px). -->
+  <!-- Arte do topo dos e-mails: parede azul com agarras, a via rosa riscada a giz e o "check" no topo.
+       Fonte do banner.png (renderizado a 1200 px de largura com resvg). -->
   <defs>
     <filter id="chalk" x="-20%" y="-20%" width="140%" height="140%">
       <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3" result="warp"/>
-      <feDisplacementMap in="SourceGraphic" in2="warp" scale="4" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="5" xChannelSelector="R" yChannelSelector="G" result="rough"/>
       <feTurbulence type="fractalNoise" baseFrequency="2.4" numOctaves="1" seed="9" result="grain"/>
       <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.35" result="holes"/>
       <feComposite in="rough" in2="holes" operator="in"/>
     </filter>
-    <filter id="soft"><feGaussianBlur stdDeviation="14"/></filter>
+    <filter id="dust"><feGaussianBlur stdDeviation="7"/></filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="0" flood-color="#141a6b" flood-opacity=".45"/></filter>
+    <pattern id="bolts" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="15" cy="15" r="2.2" fill="#1d3fd6"/>
+    </pattern>
     <path id="h0" d="M30 12c14-8 38-6 50 8s10 38-2 52-34 22-50 14S6 60 8 42s8-22 22-30Z"/>
     <path id="h1" d="M50 8c18 0 36 14 40 32s-4 40-22 48-42 4-52-12S4 36 16 22 32 8 50 8Z"/>
     <path id="h2" d="M22 20c12-14 40-14 56-2s20 38 8 54-38 20-54 10S2 52 6 38s4-6 16-18Z"/>
     <path id="h3" d="M58 10c16 4 30 20 30 38s-14 34-32 40-38-2-46-18-4-36 10-48 22-16 38-12Z"/>
-    <!-- check de giz (o mesmo traço da marca), em coordenadas 0-100 da agarra -->
-    <path id="tick" d="M26 52c6 5 12 12 17 20 9-17 22-34 40-48"/>
   </defs>
 
   <rect width="600" height="240" fill="#2f5bff"/>
-  <!-- luz suave atrás da via -->
-  <g fill="#ffffff" opacity=".14" filter="url(#soft)">
-    <ellipse cx="300" cy="120" rx="250" ry="70" transform="rotate(-14 300 120)"/>
+  <rect width="600" height="240" fill="url(#bolts)"/>
+  <!-- painéis da parede -->
+  <path d="M200 0v240M400 0v240M0 120h600" stroke="#2650ec" stroke-width="3"/>
+
+  <!-- agarras de outras vias -->
+  <g filter="url(#shadow)">
+    <use href="#h1" transform="translate(28 30) scale(.42)" fill="#ffc531"/>
+    <use href="#h3" transform="translate(96 150) scale(.36)" fill="#1fbf6a"/>
+    <use href="#h2" transform="translate(160 62) scale(.3)" fill="#ff7a1a"/>
+    <use href="#h0" transform="translate(470 150) scale(.44)" fill="#ffc531"/>
+    <use href="#h3" transform="translate(530 40) scale(.34)" fill="#9b5cff"/>
+    <use href="#h1" transform="translate(236 26) scale(.26)" fill="#1fbf6a"/>
+    <use href="#h3" transform="translate(440 86) scale(.22)" fill="#ff3d7f"/>
+    <use href="#h2" transform="translate(30 168) scale(.28)" fill="#00b8d9"/>
+    <use href="#h0" transform="translate(560 190) scale(.24)" fill="#ff7a1a"/>
   </g>
 
-  <!-- agarras feitas: cor + check de giz -->
-  <g transform="translate(46 128) scale(.86)">
-    <use href="#h0" fill="#1d3fd6" transform="translate(0 6)"/><use href="#h0" fill="#ff3d7f"/><circle cx="50" cy="50" r="5" fill="#000" opacity=".25"/>
-    <use href="#tick" fill="none" stroke="#fbfaf6" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#chalk)"/>
+  <!-- poeira de magnésio em volta da via -->
+  <g fill="#ffffff" opacity=".22" filter="url(#dust)">
+    <ellipse cx="248" cy="186" rx="34" ry="20"/>
+    <ellipse cx="300" cy="128" rx="30" ry="18"/>
+    <ellipse cx="352" cy="74" rx="34" ry="20"/>
   </g>
-  <g transform="translate(150 98) scale(.86)">
-    <use href="#h1" fill="#1d3fd6" transform="translate(0 6)"/><use href="#h1" fill="#ffc531"/><circle cx="50" cy="50" r="5" fill="#000" opacity=".25"/>
-    <use href="#tick" fill="none" stroke="#fbfaf6" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#chalk)"/>
+
+  <!-- a via: agarras rosa, ligadas por um risco de giz -->
+  <path d="M232 192C262 170 270 150 292 134S330 98 352 74" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-dasharray="2 13" opacity=".9" filter="url(#chalk)"/>
+  <g filter="url(#shadow)">
+    <use href="#h2" transform="translate(206 168) scale(.5)" fill="#ff3d7f"/>
+    <use href="#h0" transform="translate(268 108) scale(.46)" fill="#ff3d7f"/>
+    <use href="#h1" transform="translate(320 40) scale(.62)" fill="#ff3d7f"/>
   </g>
-  <g transform="translate(254 70) scale(.86)">
-    <use href="#h2" fill="#1d3fd6" transform="translate(0 6)"/><use href="#h2" fill="#1fbf6a"/><circle cx="50" cy="50" r="5" fill="#000" opacity=".25"/>
-    <use href="#tick" fill="none" stroke="#fbfaf6" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#chalk)"/>
+  <!-- magnésio nas agarras da via -->
+  <g fill="#ffffff" opacity=".55" filter="url(#chalk)">
+    <ellipse cx="240" cy="182" rx="12" ry="6"/><ellipse cx="296" cy="122" rx="10" ry="5"/><ellipse cx="358" cy="60" rx="14" ry="7"/>
   </g>
-  <g transform="translate(358 44) scale(.86)">
-    <use href="#h3" fill="#1d3fd6" transform="translate(0 6)"/><use href="#h3" fill="#ff7a1a"/><circle cx="50" cy="50" r="5" fill="#000" opacity=".25"/>
-    <use href="#tick" fill="none" stroke="#fbfaf6" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#chalk)"/>
+  <!-- parafusos -->
+  <g fill="#000000" opacity=".25">
+    <circle cx="49" cy="51" r="3"/><circle cx="114" cy="167" r="3"/><circle cx="175" cy="77" r="2.5"/><circle cx="492" cy="172" r="3"/>
+    <circle cx="545" cy="57" r="3"/><circle cx="249" cy="39" r="2.5"/><circle cx="450" cy="96" r="2"/><circle cx="44" cy="182" r="2.5"/><circle cx="572" cy="202" r="2"/>
   </g>
-  <!-- a próxima: tracejada, como os dias que faltam na semana -->
-  <g transform="translate(462 18) scale(.86)">
-    <use href="#h0" fill="none" stroke="#ffffff" stroke-width="5" stroke-dasharray="9 9" stroke-linecap="round" opacity=".7"/>
+  <g fill="#c91a58">
+    <circle cx="231" cy="193" r="3.5"/><circle cx="291" cy="131" r="3.5"/><circle cx="351" cy="71" r="4"/>
   </g>
+
+  <!-- o check de giz da via mandada -->
+  <path d="M368 52c8 6 14 14 19 23 12-23 28-44 50-62" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" filter="url(#chalk)"/>
 </svg>
