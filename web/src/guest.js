@@ -97,6 +97,7 @@ export async function guestApi(path, { method = 'GET', body = {} } = {}) {
       if (body.auto) s.autoEnded = body.auto;
       save(); return s;
     }
+    case 'DELETE sessions/:id': data.sessions = data.sessions.filter((x) => x.id !== id); save(); return { ok: true };
     case 'POST climbs': {
       const c = { ...body, id: randomId(), createdAt: nowIso() };
       data.climbs.push(c); save();

@@ -2,7 +2,10 @@
 import { fmtDate, fmtDuration, fmtPct, lang, t } from '../i18n.js';
 import { COLORS } from '../color.js';
 import * as S from '../stats.js';
-import { RESULTS, state, gymOf, colorName, grade, sessionsText, capitalize } from '../core.js';
+import { useState } from 'react';
+import { RESULTS, state, gymOf, colorName, grade, sessionsText, capitalize, api, toast, fail, loadAll } from '../core.js';
+import { render } from '../app.js';
+import { track } from '../analytics.js';
 import { setNav } from './climb.jsx';
 import { settingsSheet } from './settings.jsx';
 import { useStore, useRedraw, Seg, Swatch, Bar, ClimbRow, FadeImg, lqipBg } from './base.jsx';
@@ -95,6 +98,7 @@ export function History() {
                     <ul className="list" onClick={() => setNav(summaries.flatMap((x) => climbsOf(x).map((c) => c.id)))}>
                       {climbsOf(s).map((c) => <ClimbRow key={c.id} c={c} />)}
                     </ul>
+                    {s.endedAt && <DeleteSession s={s} climbs={climbsOf(s)} />}
                   </details>
                 </li>
               ))}
@@ -124,6 +128,34 @@ export function History() {
           </section>
         )}
     </div>
+  );
+}
+
+/** Excluir uma sessão (e os boulders dela): toque duplo para confirmar. */
+function DeleteSession({ s, climbs }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const del = async () => {
+    if (!confirm) { setConfirm(true); return; }
+    setBusy(true);
+    try {
+      // Tentativas primeiro, depois os boulders, depois a sessão.
+      for (const c of [...climbs].sort((a, b) => (b.projectId ? 1 : 0) - (a.projectId ? 1 : 0))) {
+        await api(`/climbs/${c.id}`, { method: 'DELETE' });
+        state.climbs = state.climbs.filter((x) => x.id !== c.id);
+        if (state.profile?.pinned === c.id) state.profile.pinned = null;
+      }
+      await api(`/sessions/${s.id}`, { method: 'DELETE' });
+      state.sessions = state.sessions.filter((x) => x.id !== s.id);
+      track('session_deleted', { climbs: climbs.length });
+      toast(t('session.deleted'));
+      render();
+    } catch (err) { fail(err); loadAll().then(render, () => {}); }
+  };
+  return (
+    <button className="link small danger-link" type="button" disabled={busy} onClick={del}>
+      {confirm ? t('session.confirmDelete', { n: climbs.length }) : t('session.delete')}
+    </button>
   );
 }
 

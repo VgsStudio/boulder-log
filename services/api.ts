@@ -470,6 +470,15 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       return json(201, pub(item));
     }
+    case 'DELETE /api/sessions/{id}': {
+      // Sessão criada por engano (ex.: longe do ginásio). Só sai se já não tiver boulders.
+      const sid = id(pid, 'id');
+      const left = (await queryAll(pk, 'CLIMB#')).filter((c) => c.sessionId === sid).length;
+      if (left) throw new HttpError(409, 'SESSION_HAS_CLIMBS');
+      await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { pk, sk: `SESSION#${sid}` } }));
+      log('session.deleted', {});
+      return json(200, { ok: true });
+    }
     case 'PATCH /api/sessions/{id}': {
       const b = body();
       const f: Record<string, unknown> = {};

@@ -264,7 +264,7 @@ export class BoulderStack extends Stack {
     const M = apigwv2.HttpMethod;
     const routes: [string, apigwv2.HttpMethod][] = [
       ['/api/gyms', M.GET], ['/api/gyms', M.POST], ['/api/gyms/{id}', M.PATCH],
-      ['/api/sessions', M.GET], ['/api/sessions', M.POST], ['/api/sessions/{id}', M.PATCH],
+      ['/api/sessions', M.GET], ['/api/sessions', M.POST], ['/api/sessions/{id}', M.PATCH], ['/api/sessions/{id}', M.DELETE],
       ['/api/climbs', M.GET], ['/api/climbs', M.POST],
       ['/api/climbs/{id}', M.PATCH], ['/api/climbs/{id}', M.DELETE],
       ['/api/climbs/{id}/media', M.GET], ['/api/climbs/{id}/analyze', M.POST],
