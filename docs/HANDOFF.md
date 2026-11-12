@@ -43,6 +43,7 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 | **Login** | Tela própria do app (entrar, criar conta, código por e-mail, esqueci a senha) + **Entrar com Google**. Google com o mesmo e-mail de uma conta existente é **vinculado** a ela (`services/presignup.ts`). Boas-vindas com nome e @ sugeridos na 1ª entrada. |
 | **Usar sem conta** | Tudo funciona no navegador (localStorage + IndexedDB). Na 1ª ação que exige conta (salvar boulder, ver perfil, abrir link) aparece um aviso dispensável; na 2ª, ou após 1 dia de uso, trava na tela de criar conta. Os dados ficam 30 dias e **vão junto** ao entrar (`migrateGuest`). |
 | **Avaliação** | "Está gostando?" com 5 estrelas e comentário. Aparece de tempos em tempos (7 dias se fechar, 60 se avaliar) e em Ajustes. Os resultados ficam na tabela, em `pk = FEEDBACK`. |
+| **Ajustes** | Três grupos: **Preferências** (escala de grau, metas, idioma, tema, sons; salvam sozinhas), **Notificações** (lembrete diário e horário) e **Conta** (avaliar, sair, termos). Excluir conta fica numa **Zona de perigo** tracejada em vermelho. |
 | **Conta** | Excluir conta apaga tudo: dados, laços de seguir dos dois lados, @, links, fotos e o login no Cognito. |
 | **Legal** | `/privacidade.html`, `/termos.html` e o termo das fotos (versão `2026-11-12`, novo aceite ao mudar). |
 | **E-mail** | O código de cadastro/senha sai de `Chalkmark <no-reply@vsoller.com.br>` pelo SES (fora do sandbox desde 12/11/2026), com arte e respostas para o Gmail do dono. SPF, DKIM e DMARC passam. |

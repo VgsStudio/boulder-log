@@ -2154,48 +2154,52 @@ function lineChart(weeks) {
 // ---------- ajustes ----------
 function settingsSheet() {
   const st = { ...state.settings };
-  const box = h('div', { class: 'stack' });
-  const draw = () => fill(box, 
+  const box = h('div', { class: 'stack settings' });
+  // Preferências salvam sozinhas (sem botão de salvar).
+  const save = debounce(async () => {
+    try {
+      state.settings = { ...state.settings, ...(await api('/settings', { method: 'PUT', body: { scale: st.scale, weeklySessions: st.weeklySessions, gradeGoal: st.gradeGoal } })) };
+      render();
+    } catch (err) { fail(err); }
+  }, 600);
+  const field = (label, control) => h('div', {}, h('div', { class: 'small muted' }, label), control);
+  const draw = () => fill(box,
     h('h2', {}, t('settings.title')),
-    h('div', {}, h('div', { class: 'small muted' }, t('settings.scale')),
-      seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; draw(); })),
-    h('div', {}, h('div', { class: 'small muted' }, t('settings.lang')),
-      seg([['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']], langChoice(), (v) => setLang(v))),
-    h('div', {}, h('div', { class: 'small muted' }, t('settings.theme')),
-      seg([['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]], getTheme(), (v) => { setTheme(v); draw(); })),
-    !guestMode && pushSettings(),
-    h('div', {}, h('div', { class: 'small muted' }, t('settings.sound')),
-      seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') playSent(); draw(); })),
-    h('h2', {}, t('settings.goals')),
-    h('div', { class: 'row' }, h('span', { class: 'grow' }, t('settings.weekly')),
-      stepper(st.weeklySessions, 0, 7, (n) => (st.weeklySessions = n), t('settings.weekly'))),
-    h('label', { class: 'field' }, h('span', {}, t('settings.gradeGoal')),
-      h('select', { onchange: (e) => (st.gradeGoal = e.target.value === '' ? null : Number(e.target.value)) },
-        h('option', { value: '' }, t('settings.none')),
-        S.GRADES.map((g) => h('option', { value: String(g), selected: st.gradeGoal === g }, S.gradeLabel(g, st.scale))))),
-    h('div', { class: 'row' },
-      h('button', { class: 'btn ghost grow', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')),
-      h('button', {
-        class: 'btn primary grow', type: 'button',
-        onclick: async (e) => {
-          e.currentTarget.disabled = true;
-          try {
-            state.settings = { ...state.settings, ...(await api('/settings', { method: 'PUT', body: { scale: st.scale, weeklySessions: st.weeklySessions, gradeGoal: st.gradeGoal } })) };
-            $('#sheet').close();
-            render();
-          } catch (err) { fail(err); e.target.disabled = false; }
-        },
-      }, t('settings.save'))),
-    h('button', { class: 'link', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
-      state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
-      h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
-    !guestMode && h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
-    guestMode
-      ? [h('button', { class: 'btn primary block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'signup' }); } }, t('auth.signup')),
-        h('button', { class: 'btn block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'login' }); } }, t('guest.haveAccount'))]
-      : h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
-    h('p', { class: 'small legal-links' }, h('a', { href: '/termos.html', target: '_blank' }, t('legal.terms')), ' · ', h('a', { href: '/privacidade.html', target: '_blank' }, t('legal.privacy'))),
-    !guestMode && h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
+
+    h('section', { class: 'settings-group' },
+      h('h3', {}, t('settings.prefs')),
+      field(t('settings.scale'), seg([['v', 'V (Hueco)'], ['font', 'Font']], st.scale, (v) => { st.scale = v; save(); draw(); })),
+      h('div', { class: 'row' }, h('span', { class: 'grow' }, t('settings.weekly')),
+        stepper(st.weeklySessions, 0, 7, (n) => { st.weeklySessions = n; save(); }, t('settings.weekly'))),
+      h('label', { class: 'field' }, h('span', {}, t('settings.gradeGoal')),
+        h('select', { onchange: (e) => { st.gradeGoal = e.target.value === '' ? null : Number(e.target.value); save(); } },
+          h('option', { value: '' }, t('settings.none')),
+          S.GRADES.map((g) => h('option', { value: String(g), selected: st.gradeGoal === g }, S.gradeLabel(g, st.scale))))),
+      field(t('settings.lang'), seg([['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']], langChoice(), (v) => setLang(v))),
+      field(t('settings.theme'), seg([['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]], getTheme(), (v) => { setTheme(v); draw(); })),
+      field(t('settings.sound'), seg([['on', t('settings.soundOn')], ['off', t('settings.soundOff')]], soundOn() ? 'on' : 'off', (v) => { setSound(v === 'on'); if (v === 'on') playSent(); draw(); }))),
+
+    !guestMode && h('section', { class: 'settings-group' }, h('h3', {}, t('push.settings')), pushSettings()),
+
+    h('section', { class: 'settings-group' },
+      h('h3', {}, t('settings.account')),
+      guestMode
+        ? [h('button', { class: 'btn primary block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'signup' }); } }, t('auth.signup')),
+          h('button', { class: 'btn block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'login' }); } }, t('guest.haveAccount'))]
+        : [h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
+          h('button', { class: 'btn block', type: 'button', onclick: logout }, t('settings.logout'))],
+      h('p', { class: 'small legal-links' },
+        h('button', { class: 'link small', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
+          state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
+          h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
+        ' · ', h('a', { href: '/termos.html', target: '_blank' }, t('legal.terms')), ' · ', h('a', { href: '/privacidade.html', target: '_blank' }, t('legal.privacy')))),
+
+    !guestMode && h('section', { class: 'danger-zone' },
+      h('h3', {}, t('danger.title')),
+      h('p', { class: 'small' }, t('danger.lead')),
+      h('button', { class: 'btn danger-fill block', type: 'button', onclick: deleteAccountSheet }, t('account.delete'))),
+
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')),
   );
   draw();
   openSheet(box);
@@ -2350,7 +2354,7 @@ function pushSettings() {
   const draw = (msg = '') => {
     const on = pushSupported() && Notification.permission === 'granted' && st.pushOn !== false;
     fill(box,
-      h('div', { class: 'small muted' }, t('push.settings')),
+      h('div', { class: 'small muted' }, t('push.daily')),
       !pushSupported()
         ? h('p', { class: 'small muted' }, /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone ? t('push.needInstall') : t('push.unsupported'))
         : [
