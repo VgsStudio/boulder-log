@@ -1,9 +1,7 @@
 // Gamificação: XP, nível, sequência, trilha de graus e conquistas.
 import { fmtDate, fmtDuration, lang, t } from './i18n.js';
-import { playFanfare, playSent, playTick } from './sound.js';
 import * as S from './stats.js';
 import { $, state, h, fill, svg, toast, grade, gymOf } from './core.js';
-import { openSheet } from './session.js';
 
 // ---------- gamificação: XP, nível, sequência, trilha, conquistas ----------
 export const ICONS = {
@@ -45,17 +43,6 @@ export function hold(i, fill, { fillPct = 1, track = 'var(--surface-2)' } = {}) 
 }
 /** Risco de giz desenhado à mão (filtro #chalk no index.html). */
 export const TICK = 'M24 52c6 5 12 12 17 20 9-17 22-34 40-48';
-export const chalkTick = (cls = '') => svg('svg', { class: `tick ${cls}`, viewBox: '0 0 100 100', 'aria-hidden': 'true' },
-  svg('path', { class: 'chalk-stroke', filter: 'url(#chalk)', d: TICK }));
-
-/** Pó de giz subindo (comemorações). */
-export const chalkPuff = () => h('div', { class: 'puff', 'aria-hidden': 'true' },
-  [...Array(14)].map((_, i) => {
-    const a = (i / 14) * Math.PI * 2;
-    const r = 60 + (i % 3) * 22;
-    return h('i', { style: { '--dx': `${Math.round(Math.cos(a) * r)}px`, '--dy': `${Math.round(Math.sin(a) * r * 0.7 - 20)}px`, '--s': `${6 + (i % 4) * 3}px`, '--d': `${(i % 5) * 40}ms` } });
-  }));
-
 export const KIND_COLOR = { sessions: '#2f5bff', sends: '#1fbf6a', flash: '#ffc531', grade: '#ff3d7f', projects: '#9b5cff', streak: '#ff7a1a', big: '#00b8d9', gyms: '#00b8d9' };
 
 export const icon = (kind) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, svg('path', { d: ICONS[kind] }));
@@ -78,13 +65,6 @@ export function achValue(id) {
   const [kind, v] = id.split(':');
   return kind === 'grade' ? grade(Number(v)) : kind === 'big' ? '10+' : v;
 }
-export function achBadge(a, locked = false) {
-  const kind = a.id.split(':')[0];
-  return h('li', { class: `ach ${locked ? 'locked' : ''}`, title: locked ? t('ach.locked') : fmtDate(a.at) },
-    h('span', { class: 'medal' }, hold(kind.length + (a.id.length % 4), locked ? 'var(--surface-2)' : KIND_COLOR[kind]), icon(kind), h('b', { class: 'num' }, achValue(a.id))),
-    h('span', { class: 'label' }, achLabel(a.id)));
-}
-
 /** O que já tem + a próxima meta de cada tipo (bloqueada, para dar vontade). */
 export function achCatalog() {
   const got = S.achievements(state.sessions, state.climbs);
@@ -101,112 +81,10 @@ export function achCatalog() {
   return { got: [...got].reverse(), next };
 }
 
-export const weekdayNames = () => [...Array(7)].map((_, i) => new Intl.DateTimeFormat(lang === 'pt' ? 'pt-BR' : 'en', { weekday: 'narrow' }).format(new Date(2024, 0, 1 + i)));
-
-/** Cartão principal: sequência semanal, dias da semana e nível/XP. */
-export function hero() {
-  const n = S.streakWeeks(state.sessions);
-  const dots = S.weekDots(state.sessions);
-  const wd = weekdayNames();
-  const today = (new Date().getDay() + 6) % 7;
-  const lv = S.level(S.totalXp(state.climbs));
-  return h('section', { class: `hero ${n ? 'on' : ''}` },
-    h('div', { class: 'hero-top' },
-      h('span', { class: 'flame' }, icon('streak')),
-      h('div', { class: 'grow' }, h('b', { class: 'num' }, String(n)), h('span', {}, n === 1 ? t('streak.week') : t('streak.weeks'))),
-      h('div', { class: 'lv' }, h('span', { class: 'lv-badge num' }, String(lv.level)), h('span', { class: 'small' }, t('xp.level', { n: lv.level })))),
-    h('ol', { class: 'week' }, dots.map((on, i) => h('li', { class: [on ? 'on' : 'off', i === today && 'today'].filter(Boolean).join(' ') },
-      hold(i, on ? HOLD_COLORS[i] : 'none'), on && chalkTick(), h('span', {}, wd[i])))),
-    h('div', { class: 'xp' },
-      h('div', { class: 'progress' }, h('span', { style: { '--w': `${(lv.into / lv.need) * 100}%` } })),
-      h('span', { class: 'small num' }, t('xp.toNext', { a: lv.into, b: lv.need }))),
-    h('p', { class: 'small hero-msg' }, dots.some(Boolean) ? t('streak.done') : n ? t('streak.keep') : t('streak.start')));
-}
-
-/** O que é o foguinho: a sequência de semanas, com a semana atual. */
-export function streakSheet() {
-  const n = S.streakWeeks(state.sessions);
-  const thisWeek = S.weekDots(state.sessions).some(Boolean);
-  openSheet(h('div', { class: 'stack' },
-    h('h2', {}, t('streak.title', { n })),
-    h('p', {}, t('streak.explain')),
-    hero(),
-    h('p', { class: 'muted' }, thisWeek ? t('streak.safe') : t('streak.risk')),
-    h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
-}
-
 export function streakPill() {
   const n = S.streakWeeks(state.sessions);
   const el = $('#streak-pill');
   el.hidden = !n;
   el.replaceChildren(icon('streak'), String(n));
   el.setAttribute('aria-label', `${n} ${t('streak.weeks')}`);
-}
-
-/** Trilha de graus no estilo "caminho": cada grau vira um nó que você domina mandando vias. */
-export function gradePathCard() {
-  // Só o trecho que importa: os 3 graus dominados mais altos e o que vem pela frente.
-  const all = S.gradePath(state.climbs);
-  const lastMastered = all.map((p) => p.mastered).lastIndexOf(true);
-  const path = all.slice(Math.max(0, Math.min(lastMastered - 2, all.length - 5)));
-  const offsets = [0, 1, 2, 1, 0, -1, -2, -1];
-  return h('section', { class: 'card' },
-    h('h2', {}, t('path.title')),
-    h('p', { class: 'muted small' }, t('path.hint', { m: S.MASTERY })),
-    h('ol', { class: 'path' }, path.map((p, i) => {
-      const pct = Math.min(1, p.sends / S.MASTERY);
-      const state_ = p.mastered ? 'mastered' : p.unlocked ? 'open' : 'locked';
-      const isNext = !p.mastered && p.unlocked && path.slice(0, i).every((q) => q.mastered);
-      const color = p.mastered ? HOLD_COLORS[p.grade % HOLD_COLORS.length] : p.unlocked ? '#2f5bff' : 'var(--surface-2)';
-      return h('li', { class: [state_, isNext && 'next'].filter(Boolean).join(' '), style: { '--off': offsets[i % offsets.length] } },
-        h('span', { class: 'node', 'aria-label': `${grade(p.grade)}: ${p.sends}/${S.MASTERY}` },
-          hold(p.grade, color, { fillPct: p.mastered ? 1 : p.unlocked ? Math.max(0.12, pct) : 1, track: 'var(--line)' }),
-          h('b', { class: 'num' }, grade(p.grade)), p.mastered && chalkTick('small')),
-        h('span', { class: 'node-meta small' }, p.mastered ? [icon('check'), t('path.mastered')] : p.unlocked ? `${p.sends}/${S.MASTERY}` : icon('lock')));
-    }).reverse()));
-}
-
-/** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. */
-export function celebrate({ unlocked, xp, levelUp, sent = false }) {
-  if (!unlocked.length && !levelUp) { (sent ? playSent : playTick)(); toast(t('xp.gain', { n: xp })); return; }
-  playFanfare();
-  const pr = unlocked.filter((a) => a.id.startsWith('grade:')).map((a) => Number(a.id.split(':')[1])).sort((a, b) => b - a)[0];
-  const best = Math.max(...state.climbs.filter(S.isSend).map((c) => c.grade));
-  const isPr = pr != null && pr >= best;
-  openSheet(h('div', { class: 'stack celebrate' },
-    h('div', { class: 'burst' }, chalkPuff(), chalkTick('draw')),
-    isPr
-      ? [h('p', { class: 'kicker' }, t('ach.pr')), h('div', { class: 'big-grade num' }, grade(pr)), h('p', { class: 'muted center' }, t('ach.prLead', { g: grade(pr) }))]
-      : levelUp
-        ? [h('p', { class: 'kicker' }, t('xp.levelUp', { n: levelUp })), h('div', { class: 'big-grade num' }, String(levelUp))]
-        : h('p', { class: 'kicker' }, unlocked.length === 1 ? t('ach.new') : t('ach.newMany', { n: unlocked.length })),
-    h('p', { class: 'xp-gain num center' }, t('xp.gain', { n: xp })),
-    unlocked.length > 0 && h('ul', { class: 'achs' }, unlocked.map((a) => achBadge(a))),
-    h('button', { class: 'btn primary big block', type: 'button', onclick: () => $('#sheet').close() }, t('nice'))));
-}
-
-export function recapSheet(s, unlocked) {
-  playFanfare();
-  const cs = state.climbs.filter((c) => c.sessionId === s.id);
-  const sum = S.sessionSummaries([s], state.climbs)[0];
-  const flashes = cs.filter((c) => c.result === 'flash').length;
-  const big = (v, label) => h('div', { class: 'kpi' }, h('b', {}, v), h('span', {}, label));
-  openSheet(h('div', { class: 'stack celebrate' },
-    h('div', { class: 'burst' }, chalkPuff(), chalkTick('draw')),
-    h('p', { class: 'kicker' }, t('recap.title')),
-    h('p', { class: 'muted center num' }, `${gymOf(s.gymId)?.name ?? ''}, ${fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}`),
-    h('p', { class: 'xp-gain num center' }, t('xp.gain', { n: S.totalXp(cs) })),
-    h('div', { class: 'kpis' },
-      big(String(sum.climbs), t('recap.climbs')), big(String(sum.sends), t('recap.sends')),
-      big(String(flashes), t('recap.flash')), big(sum.maxGrade != null ? grade(sum.maxGrade) : '—', t('recap.max'))),
-    hero(),
-    unlocked.length > 0 && h('ul', { class: 'achs' }, unlocked.map((a) => achBadge(a))),
-    h('button', { class: 'btn primary big block', type: 'button', onclick: () => $('#sheet').close() }, t('recap.close'))));
-}
-
-export function achievementsCard() {
-  const { got, next } = achCatalog();
-  return h('section', { class: 'card' },
-    h('div', { class: 'session-head' }, h('h2', {}, t('ach.title')), h('span', { class: 'muted small' }, t('ach.count', { n: got.length }))),
-    h('ul', { class: 'achs scroll' }, got.map((a) => achBadge(a)), next.map((a) => achBadge(a, true))));
 }

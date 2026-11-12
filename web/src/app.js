@@ -6,15 +6,17 @@ import './style.css';
 import { t } from './i18n.js';
 import { bumpNags, clearGuest, getPhoto, guestLocked, guestNags, guestPending, startGuest } from './guest.js';
 import { PHOTO_TERMS_VERSION, $, view, cfg, state, timers, h, fill, svg, toast, fail, seg, saveTokens, cognitoApi, fromAuthResult, login, idToken, guestMode, api, loadAll, loadSnapshot, activeSession, upload, setCfg, setGuestMode, clearTimers, emit } from './core.js';
-import { icon, streakSheet, streakPill } from './game.js';
-import { checkAutoEnd, viewSession, openSheet, sheetSwipe } from './session.js';
+import { icon, streakPill } from './game.js';
+import { streakSheet } from './ui/game.jsx';
+import { Session } from './ui/session.jsx';
+import { checkAutoEnd, openSheet, sheetSwipe } from './session.js';
 import { onCameraPhoto, viewNew, viewClimb, debounce, viewShare, backfillPreviews } from './climb.js';
 import { profileSheet, viewFriends, viewMe, viewUser, feed, viewFeed } from './social.js';
 import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './settings.js';
 
 // ---------- roteamento ----------
 const ROUTES = [
-  [/^#?\/?$/, viewSession, 'session'],
+  [/^#?\/?$/, () => mount(createElement(Session)), 'session'],
   [/^#\/new$/, viewNew, 'session'],
   [/^#\/climb\/([a-z0-9]{19})$/, viewClimb, null],
   [/^#\/history$/, () => mount(createElement(History)), 'history'],

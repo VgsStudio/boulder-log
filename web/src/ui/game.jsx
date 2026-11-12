@@ -1,8 +1,10 @@
 // Gamificação em React: ícones, agarras, cartão da sequência, trilha de graus, conquistas.
 import { useId } from 'react';
-import { fmtDate, lang, t } from '../i18n.js';
+import { fmtDate, fmtDuration, lang, t } from '../i18n.js';
+import { playFanfare, playSent, playTick } from '../sound.js';
 import * as S from '../stats.js';
-import { state, grade } from '../core.js';
+import { state, grade, gymOf, toast } from '../core.js';
+import { openSheet } from '../session.js';
 import { ICONS, HOLD_SHAPES, HOLD_COLORS, KIND_COLOR, TICK, achLabel, achValue, achCatalog } from '../game.js';
 import { Bar } from './base.jsx';
 
@@ -120,5 +122,69 @@ export function AchievementsCard() {
         {next.map((a) => <AchBadge key={`n-${a.id}`} a={a} locked />)}
       </ul>
     </section>
+  );
+}
+
+// ---------- janelas de comemoração ----------
+const closeSheet = () => document.querySelector('#sheet').close();
+
+/** O que é o foguinho: a sequência de semanas, com a semana atual. */
+export function streakSheet() {
+  const n = S.streakWeeks(state.sessions);
+  const thisWeek = S.weekDots(state.sessions).some(Boolean);
+  openSheet(
+    <div className="stack">
+      <h2>{t('streak.title', { n })}</h2>
+      <p>{t('streak.explain')}</p>
+      <Hero />
+      <p className="muted">{thisWeek ? t('streak.safe') : t('streak.risk')}</p>
+      <button className="btn block" type="button" onClick={closeSheet}>{t('settings.close')}</button>
+    </div>,
+  );
+}
+
+/** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. */
+export function celebrate({ unlocked, xp, levelUp, sent = false }) {
+  if (!unlocked.length && !levelUp) { (sent ? playSent : playTick)(); toast(t('xp.gain', { n: xp })); return; }
+  playFanfare();
+  const pr = unlocked.filter((a) => a.id.startsWith('grade:')).map((a) => Number(a.id.split(':')[1])).sort((a, b) => b - a)[0];
+  const best = Math.max(...state.climbs.filter(S.isSend).map((c) => c.grade));
+  const isPr = pr != null && pr >= best;
+  openSheet(
+    <div className="stack celebrate">
+      <div className="burst"><ChalkPuff /><ChalkTick cls="draw" /></div>
+      {isPr
+        ? <><p className="kicker">{t('ach.pr')}</p><div className="big-grade num">{grade(pr)}</div><p className="muted center">{t('ach.prLead', { g: grade(pr) })}</p></>
+        : levelUp
+          ? <><p className="kicker">{t('xp.levelUp', { n: levelUp })}</p><div className="big-grade num">{levelUp}</div></>
+          : <p className="kicker">{unlocked.length === 1 ? t('ach.new') : t('ach.newMany', { n: unlocked.length })}</p>}
+      <p className="xp-gain num center">{t('xp.gain', { n: xp })}</p>
+      {unlocked.length > 0 && <ul className="achs">{unlocked.map((a) => <AchBadge key={a.id} a={a} />)}</ul>}
+      <button className="btn primary big block" type="button" onClick={closeSheet}>{t('nice')}</button>
+    </div>,
+  );
+}
+
+/** Resumo ao encerrar a sessão. */
+export function recapSheet(s, unlocked) {
+  playFanfare();
+  const cs = state.climbs.filter((c) => c.sessionId === s.id);
+  const sum = S.sessionSummaries([s], state.climbs)[0];
+  const flashes = cs.filter((c) => c.result === 'flash').length;
+  const Big = ({ v, label }) => <div className="kpi"><b>{v}</b><span>{label}</span></div>;
+  openSheet(
+    <div className="stack celebrate">
+      <div className="burst"><ChalkPuff /><ChalkTick cls="draw" /></div>
+      <p className="kicker">{t('recap.title')}</p>
+      <p className="muted center num">{`${gymOf(s.gymId)?.name ?? ''}, ${fmtDuration(Date.parse(s.endedAt) - Date.parse(s.startedAt))}`}</p>
+      <p className="xp-gain num center">{t('xp.gain', { n: S.totalXp(cs) })}</p>
+      <div className="kpis">
+        <Big v={String(sum.climbs)} label={t('recap.climbs')} /><Big v={String(sum.sends)} label={t('recap.sends')} />
+        <Big v={String(flashes)} label={t('recap.flash')} /><Big v={sum.maxGrade != null ? grade(sum.maxGrade) : '—'} label={t('recap.max')} />
+      </div>
+      <Hero />
+      {unlocked.length > 0 && <ul className="achs">{unlocked.map((a) => <AchBadge key={a.id} a={a} />)}</ul>}
+      <button className="btn primary big block" type="button" onClick={closeSheet}>{t('recap.close')}</button>
+    </div>,
   );
 }
