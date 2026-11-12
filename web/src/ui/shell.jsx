@@ -31,7 +31,7 @@ const ROUTES = [
   [/^#\/progress$/, () => <Progress />, 'profile', 'progress'],
   [/^#\/feed$/, () => <Feed />, 'feed', 'home'],
   [/^#\/me$/, () => <Me />, 'profile', 'my_profile'],
-  [/^#\/friends$/, () => <Friends />, 'profile', 'friends'],
+  [/^#\/friends$/, () => <Friends />, 'ranking', 'friends'],
   [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => <User handle={handle} />, 'profile', 'user_profile'],
 ];
 // Home (feed) fora da barra enquanto há poucos usuários: a rota #/feed continua existindo.
@@ -108,6 +108,8 @@ const TABS = [
   HOME_ON && ['#/feed', 'feed', 'tab.home', <path key="p" d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z" />],
   ['#/', 'session', 'tab.session', <path key="p" d="M4 20 10 6l4 7 2-3 4 10Z" />],
   null, // câmera
+  // Ranking da semana + achar amigos: aba própria (antes ficava dentro do perfil).
+  ['#/friends', 'ranking', 'tab.ranking', [<path key="c" d="M8 4h8v5a4 4 0 0 1-8 0Z" />, <path key="h" d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8" />]],
   ['#/me', 'profile', 'tab.profile', [<circle key="c" cx={12} cy={8} r={4} />, <path key="p" d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7Z" />]],
 ];
 function TabBar({ hidden, tab }) {

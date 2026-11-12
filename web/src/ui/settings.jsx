@@ -162,7 +162,7 @@ export function appTour(onDone) {
     { el: '#tab-cam', text: t('tour.cam') },
     { el: () => [...document.querySelectorAll('main .btn.primary.big, main .btn.go.big')][0], text: t('tour.session') },
     { el: '#streak-pill:not([hidden])', text: t('tour.streak') },
-    { el: '#tabbar a[data-tab="feed"]', text: t('tour.feed') },
+    { el: '#tabbar a[data-tab="ranking"]', text: t('tour.ranking') },
     { el: '#tabbar a[data-tab="profile"]', text: t('tour.profile') },
     { el: '#open-settings', text: t('tour.settings') },
   ], onDone);

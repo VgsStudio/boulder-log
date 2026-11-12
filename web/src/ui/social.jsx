@@ -196,8 +196,7 @@ export function Friends() {
   };
   return (
     <div className="stack">
-      <div className="row"><button className="link" type="button" onClick={() => (history.length > 1 ? history.back() : (location.hash = '#/me'))}>‹ {t('back')}</button></div>
-      <h1>{t('tab.friends')}</h1>
+      <h1>{t('tab.ranking')}</h1>
       {!me && (
         <section className="card stack">
           <h2>{t('profile.create')}</h2><p className="muted">{t('profile.lead')}</p>
@@ -278,17 +277,6 @@ export function Me() {
   );
 }
 
-/** Atalho do meu perfil para Amigos: ranking da semana resumido. */
-function FriendsCard() {
-  const d = useSocial();
-  return (
-    <a className="card friends-card" href="#/friends">
-      <div className="row"><h2 className="grow">{t('tab.friends')}</h2><span className="link">{t('friends.open')} ›</span></div>
-      {d?.ranking.length > 1 ? <RankList ranking={d.ranking.slice(0, 3)} mini /> : <p className="muted small">{t('friends.cta')}</p>}
-    </a>
-  );
-}
-
 export const STATUS_FILTERS = ['all', 'sent', 'project', 'dropped'];
 const profileUi = { filter: 'all' };
 export const userCache = new Map(); // perfis já abertos (as URLs das fotos valem 1 h; a volta recarrega por trás)
@@ -344,7 +332,6 @@ export function User({ handle, isTab = false }) {
               <span className="grow" /><ShareProfileButton u={u} />
             </div>
           )}
-      {u.me && <FriendsCard />}
       {u.me && (
         <a className="card row progress-link" href="#/progress">
           <span className="ico-wrap"><LineIcon d="M4 19h16M6 16l4-5 3 3 5-7" /></span>
