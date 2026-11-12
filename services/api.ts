@@ -375,6 +375,11 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         Bucket: PHOTO_BUCKET,
         Delete: { Objects: (['full', 'thumb'] as const).map((k) => ({ Key: photoKey(sub, cid, k) })), Quiet: true },
       }));
+      // Era o boulder fixado no perfil: sai do perfil junto.
+      await ddb.send(new UpdateCommand({
+        TableName: TABLE, Key: { pk, sk: 'PROFILE' }, UpdateExpression: 'REMOVE pinned',
+        ConditionExpression: 'pinned = :c', ExpressionAttributeValues: { ':c': cid },
+      })).catch((e) => { if ((e as Error).name !== 'ConditionalCheckFailedException') throw e; });
       return json(200, { ok: true });
     }
     // ---------- compartilhar um boulder ----------

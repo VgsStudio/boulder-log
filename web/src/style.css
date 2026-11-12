@@ -544,3 +544,7 @@ button.streak-pill { border: 0; cursor: pointer; font: inherit; font-family: var
 .pin-btn[aria-pressed="true"] .line-ico { fill: var(--blue-soft); }
 .share-btn { gap: 8px; }
 .share-btn .line-ico { width: 20px; height: 20px; }
+
+/* Janela aberta: a página de trás não rola nem mexe. */
+html:has(dialog[open]) { overflow: hidden; }
+.sheet { overscroll-behavior: contain; }

@@ -905,13 +905,23 @@ function viewClimb(id) {
       fail(err);
     }
   };
+  // Excluir: numa raiz de projeto apaga o projeto inteiro (raiz + tentativas); numa tentativa, só ela.
+  const tryIds = () => state.climbs.filter((x) => x.projectId === c.id).map((x) => x.id);
   const del = async (e) => {
     if (!confirmDelete) { confirmDelete = true; e.currentTarget.textContent = t('climb.confirmDelete'); return; }
+    e.currentTarget.disabled = true;
+    const ids = [...tryIds(), c.id];
     try {
-      await api(`/climbs/${c.id}`, { method: 'DELETE' });
-      state.climbs = state.climbs.filter((x) => x.id !== c.id);
+      for (const x of ids) await api(`/climbs/${x}`, { method: 'DELETE' });
+      state.climbs = state.climbs.filter((x) => !ids.includes(x.id));
+      if (state.profile?.pinned && ids.includes(state.profile.pinned)) state.profile.pinned = null;
+      toast(t('climb.deleted'));
       history.back();
-    } catch (err) { fail(err); }
+    } catch (err) {
+      // O que já saiu, saiu: recarrega para a tela não mostrar registro apagado.
+      fail(err);
+      loadAll().then(render, () => {});
+    }
   };
 
   // Edição das agarras da via sobre a foto salva: o detector roda de novo e cada toque inclui ou tira.
@@ -1037,7 +1047,8 @@ function viewClimb(id) {
           : h('button', { class: 'btn block', type: 'button', onclick: analyze }, t('ai.analyze'))),
 
       h('button', { class: 'btn block', type: 'button', onclick: (e) => shareClimb(r, e.currentTarget) }, t('share.button')),
-      h('button', { class: 'btn ghost danger block', type: 'button', onclick: del }, t('climb.delete')),
+      h('button', { class: 'btn ghost danger block', type: 'button', onclick: del },
+        cur.id === r.id && tryIds().length ? t('climb.deleteProject', { n: tryIds().length + 1 }) : t('climb.delete')),
     );
   };
 
@@ -1168,9 +1179,21 @@ function stage(content, onTap) {
   return box;
 }
 
+/** Foto que aparece na hora: começa pela miniatura (leve) e troca pela grande quando ela chega;
+ *  se a grande falhar (upload que não terminou), a miniatura fica. */
+function photoImg(full, thumb) {
+  const img = h('img', { src: thumb || full, alt: '', decoding: 'async', onerror: () => { if (img.src !== full && full) img.src = full; } });
+  if (thumb && full && full !== thumb) {
+    const pre = new Image();
+    pre.onload = () => { img.src = full; };
+    pre.src = full;
+  }
+  return img;
+}
+
 /** Foto de um boulder com as agarras da via marcadas. */
 const climbStage = (url, c) => url && stage([
-  h('img', { src: url, alt: '', decoding: 'async' }),
+  photoImg(url, c.thumbUrl),
   holdsOverlay(c.holds),
   c.tap && h('span', { class: 'marker', style: { '--x': `${c.tap.x * 100}%`, '--y': `${c.tap.y * 100}%` } })]);
 
@@ -1367,8 +1390,8 @@ function viewUser(handle) {
             .map(([v, l]) => h('div', { class: 'kpi' }, h('b', {}, String(v)), h('span', {}, l)))),
         h('h2', {}, t('profile.history')),
         u.climbs.length
-          ? h('div', { class: 'gallery' }, u.climbs.map((c) => h('button', { type: 'button', onclick: () => friendClimbSheet(u, c) },
-            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200 }),
+          ? h('div', { class: 'gallery' }, u.climbs.map((c) => h('button', { type: 'button', onclick: () => (u.me ? (location.hash = `#/climb/${c.id}`) : friendClimbSheet(u, c)) },
+            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
             h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
           : h('p', { class: 'muted' }, t('history.empty')),
       ]
@@ -1485,7 +1508,7 @@ function viewHistory() {
               h('option', { value: '' }, `${t('climb.result')}: ${t('history.all')}`),
               RESULTS.map((r) => h('option', { value: r, selected: historyUi.result === r }, t(`result.${r}`))))),
           h('div', { class: 'gallery' }, gallery.map((c) => h('a', { href: `#/climb/${c.id}` },
-            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200 }),
+            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
             h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))),
     );
   };
