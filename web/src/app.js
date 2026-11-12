@@ -1621,7 +1621,7 @@ function viewHistory() {
         ? (summaries.length
           ? h('ul', { class: 'list card' }, summaries.map((s) => h('li', {}, h('details', { class: 'session', open: summaries.length === 1 },
             h('summary', {}, h('div', { class: 'grow' }, sessionHeader(s))),
-            h('ul', { class: 'list' }, state.climbs.filter((c) => c.sessionId === s.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map(climbRow))))))
+            h('ul', { class: 'list' }, state.climbs.filter((c) => c.sessionId === s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(climbRow))))))
           : h('p', { class: 'muted' }, t('history.empty')))
         : h('section', {},
           h('div', { class: 'row' },
