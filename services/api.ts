@@ -293,6 +293,25 @@ const mutualFriends = async (sub: string) => {
   const back = new Set(followers);
   return following.filter((u) => back.has(u));
 };
+/** Desativa todos os links já criados de um boulder (referências gravadas ao compartilhar). */
+async function revokeShares(sub: string, cid: string) {
+  const refs = await queryAll(pkOf(sub), `SHAREREF#${cid}#`);
+  for (const r of refs) {
+    const token = String(r.sk).split('#')[2];
+    await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { pk: `SHARE#${token}`, sk: 'SHARE' } }));
+    await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { pk: r.pk, sk: r.sk } }));
+  }
+  return refs.length;
+}
+const blockedBy = async (sub: string) => new Set((await queryAll(pkOf(sub), 'BLOCK#')).map((x) => String(x.sk).slice(6)));
+/** Um bloqueou o outro (qualquer lado)? */
+async function blockedEither(a: string, b: string) {
+  const [x, y] = await Promise.all([
+    ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(a), sk: `BLOCK#${b}` } })),
+    ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(b), sk: `BLOCK#${a}` } })),
+  ]);
+  return !!(x.Item || y.Item);
+}
 const FEED_PAGE = 20;
 const MAX_FEED_FRIENDS = 100;
 
@@ -483,9 +502,13 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
     }
     case 'PATCH /api/climbs/{id}':
       return json(200, await withThumb(sub, await patch(pk, `CLIMB#${id(pid, 'id')}`, cleanClimb(body(), true))));
+    case 'DELETE /api/climbs/{id}/share':
+      // Desativar os links já enviados deste boulder (quem já adicionou fica com a cópia).
+      return json(200, { revoked: await revokeShares(sub, id(pid, 'id')) });
     case 'DELETE /api/climbs/{id}': {
       const cid = id(pid, 'id');
       await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { pk, sk: `CLIMB#${cid}` } }));
+      await revokeShares(sub, cid);
       await s3.send(new DeleteObjectsCommand({
         Bucket: PHOTO_BUCKET,
         Delete: { Objects: (['full', 'thumb'] as const).map((k) => ({ Key: photoKey(sub, cid, k) })), Quiet: true },
@@ -513,6 +536,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         ttl: Math.floor(Date.now() / 1000) + SHARE_DAYS * 86400,
       };
       await ddb.send(new PutCommand({ TableName: TABLE, Item: share }));
+      await ddb.send(new PutCommand({ TableName: TABLE, Item: { pk, sk: `SHAREREF#${cid}#${token}`, ttl: share.ttl } }));
       log('share.created', { climbId: cid });
       return json(201, { token });
     }
@@ -644,7 +668,8 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         ExclusiveStartKey = out.LastEvaluatedKey;
       } while (ExclusiveStartKey && found.length < 20 && ++pages < MAX_SCAN_PAGES);
       const following = new Set(await followsOf(sub, 'FOLLOWS#'));
-      return json(200, await Promise.all(found.filter((p) => subOfPk(p.pk) !== sub).slice(0, 20)
+      const blocked = await blockedBy(sub);
+      return json(200, await Promise.all(found.filter((p) => subOfPk(p.pk) !== sub && !blocked.has(subOfPk(p.pk))).slice(0, 20)
         .map(async (p) => ({ ...(await card(p)), following: following.has(subOfPk(p.pk)) }))));
     }
     case 'GET /api/users/{handle}': {
@@ -677,6 +702,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const pinnedSent = pinned ? climbs.some((c) => (c.sk === pinned.sk || c.projectId === p.pinned) && isSend(c)) : false;
       return json(200, {
         ...(await card(p)), me, following, followsMe, friends,
+        blocked: !me && sub !== ANON ? !!(await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk, sk: `BLOCK#${them}` } }))).Item : false,
         followers: followers.length, follows: follows.length,
         level: level(totalXp(climbs)).level,
         pinned: pinned ? { ...(await photo(pinned)), tries: pinnedTries, sent: pinnedSent } : null,
@@ -696,6 +722,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const them = await subOfHandle(event.pathParameters?.handle);
       if (them === sub) bad('handle');
       if (!(await profileOf(sub))) throw new HttpError(409, 'NO_PROFILE');
+      if (event.routeKey.startsWith('POST') && (await blockedEither(sub, them))) throw new HttpError(403, 'BLOCKED');
       const keys = [{ pk, sk: `FOLLOWS#${them}` }, { pk: pkOf(them), sk: `FOLLOWER#${sub}` }];
       const on = event.routeKey.startsWith('POST');
       if (on && (await followsOf(sub, 'FOLLOWS#')).length >= MAX_FOLLOWING) throw new HttpError(409, 'TOO_MANY_FOLLOWING');
@@ -715,6 +742,25 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         }).catch((e) => log('push.follow', { message: (e as Error).message.slice(0, 120) }));
       }
       return json(200, { following: on, followsMe: await isFollowing(them, sub) });
+    }
+    case 'POST /api/users/{handle}/block':
+    case 'DELETE /api/users/{handle}/block': {
+      // Bloquear: desfaz o seguir dos dois lados e impede seguir de novo; some das sugestões e da busca.
+      const them = await subOfHandle(event.pathParameters?.handle);
+      if (them === sub) bad('handle');
+      if (event.routeKey.startsWith('DELETE')) {
+        await ddb.send(new DeleteCommand({ TableName: TABLE, Key: { pk, sk: `BLOCK#${them}` } }));
+        return json(200, { blocked: false });
+      }
+      await ddb.send(new TransactWriteCommand({
+        TransactItems: [
+          { Put: { TableName: TABLE, Item: { pk, sk: `BLOCK#${them}`, at: nowIso() } } },
+          ...[[pk, `FOLLOWS#${them}`], [pkOf(them), `FOLLOWER#${sub}`], [pkOf(them), `FOLLOWS#${sub}`], [pk, `FOLLOWER#${them}`]]
+            .map(([p, s]) => ({ Delete: { TableName: TABLE, Key: { pk: p, sk: s } } })),
+        ],
+      }));
+      log('user.blocked', {});
+      return json(200, { blocked: true });
     }
     case 'POST /api/users/{handle}/climbs/{id}/copy': {
       // "Quero tentar": copia um boulder de um amigo para os próprios projetos.
@@ -807,7 +853,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         .map(async (r) => ({ ...(await card(people.get(r.u)!)), weekXp: r.xp, me: r.u === sub })));
 
       // Talvez você conheça: segue você, te mandou boulder, seguido por quem você segue, mesmo ginásio.
-      const skip = new Set([sub, ...following]);
+      const skip = new Set([sub, ...following, ...(await blockedBy(sub))]);
       const why = new Map<string, string>();
       const add = (u: string, reason: string) => { if (!skip.has(u) && !why.has(u)) why.set(u, reason); };
       followers.forEach((u) => add(u, 'followsYou'));

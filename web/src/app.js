@@ -1283,7 +1283,16 @@ async function shareClimb(c, btn) {
       h('p', { class: 'muted' }, t('share.lead')),
       h('input', { type: 'text', value: url, readonly: true, onfocus: (e) => e.target.select() }),
       navigator.share && h('button', { class: 'btn primary big block', type: 'button', onclick: () => navigator.share({ title: 'Chalkmark', text, url }).catch(() => {}) }, t('share.send')),
-      h('button', { class: 'btn block', type: 'button', onclick: copy }, t('share.copy'))));
+      h('button', { class: 'btn block', type: 'button', onclick: copy }, t('share.copy')),
+      h('button', {
+        class: 'link small danger-link', type: 'button',
+        onclick: async (e) => {
+          const b = e.currentTarget;
+          if (!b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = t('share.revokeConfirm'); return; }
+          b.disabled = true;
+          try { await api(`/climbs/${c.id}/share`, { method: 'DELETE' }); $('#sheet').close(); toast(t('share.revoked')); } catch (err) { fail(err); }
+        },
+      }, t('share.revoke'))));
   } catch (err) { fail(err); }
   btn.disabled = false;
 }
@@ -1673,8 +1682,10 @@ function viewUser(handle, isTab = false) {
       ? h('div', { class: 'row' },
         h('button', { class: 'btn grow', type: 'button', onclick: async () => { if (await profileSheet()) load(); } }, t('profile.edit')),
         shareProfileButton(u))
-      : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends')),
-        h('span', { class: 'grow' }), shareProfileButton(u)),
+      : u.blocked
+        ? h('p', { class: 'muted' }, t('block.youBlocked'))
+        : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends')),
+          h('span', { class: 'grow' }), shareProfileButton(u)),
     u.me && friendsCard(),
     u.me && h('a', { class: 'card row progress-link', href: '#/progress' }, h('span', { class: 'ico-wrap' }, lineIcon('M4 19h16M6 16l4-5 3 3 5-7')),
       h('div', { class: 'grow' }, h('strong', {}, t('tab.progress')), h('div', { class: 'muted small' }, t('profile.progressLead'))), h('span', { class: 'muted' }, '›')),
@@ -1710,6 +1721,19 @@ function viewUser(handle, isTab = false) {
         })(),
       ]
       : h('section', { class: 'card locked' }, icon('lock'), h('p', {}, u.following ? t('profile.lockedBack') : t('profile.locked'))),
+    !u.me && !guestMode && h('button', {
+      class: 'link small danger-link block-link', type: 'button',
+      onclick: async (e) => {
+        const b = e.currentTarget;
+        if (!u.blocked && !b.dataset.confirm) { b.dataset.confirm = '1'; b.textContent = t('block.confirm', { h: u.handle }); return; }
+        b.disabled = true;
+        try {
+          await api(`/users/${u.handle}/block`, { method: u.blocked ? 'DELETE' : 'POST' });
+          toast(u.blocked ? t('block.undone') : t('block.done', { h: u.handle }));
+          social.data = null; userCache.delete(u.handle); load();
+        } catch (err) { fail(err); b.disabled = false; }
+      },
+    }, u.blocked ? t('block.undo', { h: u.handle }) : t('block.button', { h: u.handle })),
   );
   let asked = false;
   const load = () => (guestMode ? publicApi : api)(`/users/${handle}`).then((u) => {
