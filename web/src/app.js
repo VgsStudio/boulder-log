@@ -11,6 +11,7 @@ import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.j
 // detect.js é leve; o onnxruntime-web e o modelo (~10 MB) só baixam na primeira foto.
 import { detectHolds, growRegion, holdAt, routeHolds } from './detect.js';
 import { playFanfare, playSent, playTick, setSound, soundOn } from './sound.js';
+import { bumpNags, clearGuest, getPhoto, guestApi, guestLocked, guestNags, guestPending, putPhoto, startGuest } from './guest.js';
 
 const PHOTO_TERMS_VERSION = '2026-11-12'; // igual a services/api.ts
 import * as S from './stats.js';
@@ -79,6 +80,7 @@ function toast(msg) {
   toast.timer = setTimeout(() => (el.hidden = true), 2800);
 }
 const fail = (e) => {
+  if (e?.code === 'NEED_ACCOUNT') { needAccount(); return; }
   console.error(e);
   toast(e?.code === 'AI_DAILY_LIMIT' ? t('ai.limit') : e?.code === 'AI_UNAVAILABLE' || e?.code === 'AI_FAILED' ? t('ai.unavailable') : navigator.onLine ? t('error.generic') : t('error.offline'));
 };
@@ -184,8 +186,12 @@ async function idToken() {
   return tk?.id_token ?? null;
 }
 
+/** Usando sem conta (dados só neste navegador; ver guest.js). */
+let guestMode = false;
+
 async function api(path, { method = 'GET', body } = {}) {
   const jwt = await idToken();
+  if (!jwt && guestMode) return guestApi(path, { method, body });
   if (!jwt) { showAuth(); throw new Error('auth'); }
   const res = await fetch(`/api${path}`, {
     method,
@@ -194,6 +200,14 @@ async function api(path, { method = 'GET', body } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { showAuth(); throw new Error('auth'); }
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { code: data.error, status: res.status });
+  return data;
+}
+
+/** Leitura pública (sem login): boulder compartilhado e cartão de perfil. */
+async function publicApi(path) {
+  const res = await fetch(`/api/public${path}`);
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { code: data.error, status: res.status });
   return data;
 }
@@ -226,7 +240,8 @@ async function compress(canvas, q) {
   return webp?.type === 'image/webp' ? webp : encode(canvas, 'image/jpeg', q);
 }
 /** Envia a foto direto ao S3; tenta 3 vezes (sinal ruim no ginásio é comum). */
-async function upload({ url, fields }, blob) {
+async function upload({ url, fields, guest }, blob) {
+  if (guest) return putPhoto(guest, blob); // sem conta: a foto fica no navegador até criar conta
   for (let attempt = 1; ; attempt++) {
     const fd = new FormData();
     Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
@@ -787,10 +802,11 @@ function viewNew() {
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
       setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: S.isSend(climb) }), 50);
       location.replace(`#/climb/${climb.id}`); // sem voltar para o formulário
+      if (guestMode) setTimeout(needAccount, 1600); // depois da comemoração
       // A foto sobe em segundo plano; depois dela, o estilo da via (IA). Nada disso segura a tela.
       if (uploads) {
         Promise.all([upload(uploads.full, full), upload(uploads.thumb, thumb)])
-          .then(() => api(`/climbs/${climb.id}/analyze`, { method: 'POST' }).then((x) => {
+          .then(() => !guestMode && api(`/climbs/${climb.id}/analyze`, { method: 'POST' }).then((x) => {
             upsert(state.climbs, x);
             if (location.hash === `#/climb/${climb.id}`) render();
           }, (err) => console.warn('analyze', err)))
@@ -1156,8 +1172,10 @@ async function shareClimb(c, btn) {
 /** Boulder recebido por link: ver e adicionar aos próprios projetos. */
 function viewShare(token) {
   const box = h('div', { class: 'stack' }, h('p', { class: 'small detect-status loading' }, t('share.loading')));
-  api(`/shares/${token}`).then((sh) => {
+  (guestMode ? publicApi : api)(`/shares/${token}`).then((sh) => {
+    if (guestMode) setTimeout(needAccount, 1200);
     const add = async (e) => {
+      if (guestMode) { needAccount(); return; }
       e.currentTarget.disabled = true;
       try {
         const climb = await api(`/shares/${token}/accept`, { method: 'POST' });
@@ -1402,6 +1420,7 @@ function followButton(p, onChange) {
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (guestMode) { needAccount(); return; }
     if (!(await needProfile())) return;
     const on = !p.following;
     p.following = on;
@@ -1476,6 +1495,12 @@ function viewFriends() {
 
 /** Aba Perfil: o seu perfil (com Amigos dentro), ou o convite para criar um. */
 function viewMe() {
+  if (guestMode) {
+    return h('div', { class: 'stack' }, h('h1', {}, t('tab.profile')),
+      h('section', { class: 'card stack' }, h('h2', {}, t('guest.profileTitle')), h('p', { class: 'muted' }, t('guest.profileLead')),
+        h('button', { class: 'btn primary big block', type: 'button', onclick: () => showAuth({ mode: 'signup' }) }, t('auth.signup')),
+        h('button', { class: 'btn block', type: 'button', onclick: () => showAuth({ mode: 'login' }) }, t('guest.haveAccount'))));
+  }
   if (state.profile) return viewUser(state.profile.handle, true);
   return h('div', { class: 'stack' },
     h('h1', {}, t('tab.profile')),
@@ -1555,7 +1580,11 @@ function viewUser(handle, isTab = false) {
       ]
       : h('section', { class: 'card locked' }, icon('lock'), h('p', {}, u.following ? t('profile.lockedBack') : t('profile.locked'))),
   );
-  const load = () => api(`/users/${handle}`).then((u) => { userCache.set(handle, u); draw(u); restoreScroll(); },
+  let asked = false;
+  const load = () => (guestMode ? publicApi : api)(`/users/${handle}`).then((u) => {
+    userCache.set(handle, u); draw(u); restoreScroll();
+    if (guestMode && !asked) { asked = true; setTimeout(needAccount, 1200); }
+  },
     (err) => { if (!userCache.has(handle)) fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('profile.notFound') : t('error.generic'))); });
   if (userCache.has(handle)) { draw(userCache.get(handle)); }
   load();
@@ -1580,6 +1609,7 @@ function tryButton(u, c) {
   return h('button', {
     class: 'btn go block', type: 'button',
     onclick: async (e) => {
+      if (guestMode) { needAccount(); return; }
       e.currentTarget.disabled = true;
       try {
         const climb = await api(`/users/${u.handle}/climbs/${c.id}/copy`, { method: 'POST' });
@@ -1827,10 +1857,13 @@ function settingsSheet() {
     h('button', { class: 'link', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
       state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
       h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
-    h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
-    h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
+    !guestMode && h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
+    guestMode
+      ? [h('button', { class: 'btn primary block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'signup' }); } }, t('auth.signup')),
+        h('button', { class: 'btn block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'login' }); } }, t('guest.haveAccount'))]
+      : h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
     h('p', { class: 'small legal-links' }, h('a', { href: '/termos.html', target: '_blank' }, t('legal.terms')), ' · ', h('a', { href: '/privacidade.html', target: '_blank' }, t('legal.privacy'))),
-    h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
+    !guestMode && h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
   );
   draw();
   openSheet(box);
@@ -1844,7 +1877,7 @@ const fbLater = (days) => { try { localStorage.setItem(FB_KEY, String(Date.now()
 /** Pergunta de tempos em tempos: só para quem já usou o app (2+ sessões), nunca por cima de outra janela.
  *  Fechou sem avaliar: volta em 7 dias. Avaliou: só em 60. */
 function maybeAskFeedback() {
-  if (state.sessions.length < 2 || $('#sheet').open || activeSession()) return;
+  if (guestMode || state.sessions.length < 2 || $('#sheet').open || activeSession()) return;
   if (!fbNext()) { fbLater(3); return; } // primeira vez: dá uns dias de uso antes
   if (Date.now() >= fbNext()) feedbackSheet(true);
 }
@@ -1945,10 +1978,61 @@ const GOOGLE_G = [['#4285F4', 'M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 
   ['#EA4335', 'M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 6 12 6Z']];
 
 /** Entrar, criar conta, confirmar e-mail e trocar a senha, tudo na tela do app. */
-function showAuth() {
+/** Pede conta para quem usa sem login: a 1ª vez dá para dispensar; depois, trava na tela de criar conta. */
+function needAccount() {
+  if (!guestMode) return;
+  if (guestNags() < 1) {
+    bumpNags();
+    openSheet(h('div', { class: 'stack' },
+      h('h2', {}, t('guest.title')),
+      h('p', { class: 'muted' }, t('guest.lead')),
+      h('button', { class: 'btn primary big block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'signup' }); } }, t('auth.signup')),
+      h('button', { class: 'btn block', type: 'button', onclick: () => { $('#sheet').close(); showAuth({ mode: 'login' }); } }, t('guest.haveAccount')),
+      h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow'))));
+    return;
+  }
+  bumpNags();
+  if ($('#sheet').open) $('#sheet').close();
+  showAuth({ mode: 'signup', blocked: true });
+}
+
+/** Leva o que foi feito sem conta para a conta: ginásios, sessões, boulders (com fotos e agarras). */
+async function migrateGuest(g) {
+  const byTime = (l, k) => [...l].sort((a, b) => String(a[k]).localeCompare(String(b[k])));
+  if (g.settings.photoTermsVersion) await api('/settings', { method: 'PUT', body: { acceptPhotoTerms: PHOTO_TERMS_VERSION } });
+  const gyms = await api('/gyms');
+  const gymMap = {};
+  for (const gy of g.gyms) {
+    const same = gyms.find((x) => x.name.trim().toLowerCase() === gy.name.trim().toLowerCase());
+    gymMap[gy.id] = same?.id ?? (await api('/gyms', { method: 'POST', body: { name: gy.name, ...(gy.loc ? { loc: gy.loc } : {}) } })).id;
+  }
+  const sesMap = {};
+  for (const s of byTime(g.sessions, 'startedAt')) {
+    if (!gymMap[s.gymId]) continue;
+    const n = await api('/sessions', { method: 'POST', body: { gymId: gymMap[s.gymId], startedAt: s.startedAt } });
+    sesMap[s.id] = n.id;
+    if (s.endedAt) await api(`/sessions/${n.id}`, { method: 'PATCH', body: { end: true, endedAt: s.endedAt, ...(s.feeling ? { feeling: s.feeling } : {}), ...(s.note ? { note: s.note } : {}) } });
+  }
+  const climbMap = {};
+  for (const c of byTime(g.climbs, 'createdAt')) {
+    const { id, sessionId, projectId, thumbUrl: _t, dropped, droppedAt: _d, ...rest } = c;
+    if (!sesMap[sessionId]) continue;
+    const full = c.photoType ? await getPhoto(`${id}/full`) : null;
+    const thumb = c.photoType ? await getPhoto(`${id}/thumb`) : null;
+    const body = { ...rest, sessionId: sesMap[sessionId], ...(projectId && climbMap[projectId] ? { projectId: climbMap[projectId] } : {}) };
+    if (!full) delete body.photoType;
+    const { climb, uploads } = await api('/climbs', { method: 'POST', body });
+    climbMap[id] = climb.id;
+    if (uploads && full) await Promise.all([upload(uploads.full, full), thumb ? upload(uploads.thumb, thumb) : null]);
+    if (dropped) await api(`/climbs/${climb.id}`, { method: 'PATCH', body: { dropped: true } });
+  }
+  clearGuest();
+}
+
+function showAuth({ mode = 'login', blocked = false } = {}) {
   $('#tabbar').hidden = true;
   $('#open-settings').hidden = true;
-  const f = { mode: 'login', email: '', password: '', code: '', error: '', info: '', busy: false };
+  const f = { mode, email: '', password: '', code: '', error: '', info: '', busy: false };
   const box = h('form', { class: 'auth', novalidate: true });
   const go = (mode, info = '') => { Object.assign(f, { mode, error: '', info, code: '' }); draw(); };
   const msg = (err) => ({
@@ -2015,6 +2099,7 @@ function showAuth() {
     h('img', { class: 'auth-logo', src: '/icon.svg', alt: '', width: 88, height: 88 }),
     h('h1', {}, t('auth.title')),
     h('p', { class: 'auth-lead' }, t('auth.lead')),
+    guestMode && h('p', { class: 'auth-info' }, blocked ? t('guest.blocked') : t('guest.keep')),
     (f.mode === 'login' || f.mode === 'signup') && seg([['login', t('auth.login')], ['signup', t('auth.signup')]], f.mode, (m) => go(m)),
     f.info && h('p', { class: 'auth-info' }, f.info),
     f.mode === 'login' && [email(), pw(t('auth.password'), 'current-password'), submit(t('auth.login')),
@@ -2031,7 +2116,8 @@ function showAuth() {
       h('div', { class: 'auth-or' }, h('span', {}, t('auth.or'))),
       h('button', { class: 'btn block google-btn', type: 'button', onclick: () => login('oauth2/authorize', { identity_provider: 'Google' }) },
         svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, GOOGLE_G.map(([c, d]) => svg('path', { d, fill: c }))), t('auth.google')),
-    ]);
+    ],
+    guestMode && !blocked && h('button', { class: 'link small', type: 'button', onclick: () => { $('#tabbar').hidden = false; $('#open-settings').hidden = false; render(); } }, t('guest.continue')));
   draw();
   view.replaceChildren(box);
 }
@@ -2043,7 +2129,17 @@ async function boot() {
   $('#streak-pill').addEventListener('click', streakSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   cfg = await (await fetch('/config.json', { cache: 'no-store' })).json();
-  if (!(await idToken())) return showAuth();
+  const pending = guestPending();
+  if (!(await idToken())) {
+    // Sem conta: usa normalmente; os dados ficam no navegador. Depois de 1 dia, só com conta.
+    guestMode = true;
+    startGuest();
+    if (guestLocked()) { await loadAll(); return showAuth({ mode: 'signup', blocked: true }); }
+    const cta = h('button', { class: 'btn small-btn primary', type: 'button', onclick: () => showAuth({ mode: 'signup' }) }, t('guest.cta'));
+    $('#open-settings').before(cta);
+  } else if (pending) {
+    try { await migrateGuest(pending); toast(t('guest.migrated')); } catch (e) { console.error(e); toast(t('guest.migrateFailed')); }
+  }
   try {
     await loadAll();
   } catch (e) {
@@ -2068,7 +2164,7 @@ async function boot() {
   checkAutoEnd();
   // Primeira vez (sem perfil): boas-vindas com nome e @ já sugeridos; "agora não" pergunta de novo amanhã.
   try {
-    if (!state.profile && Date.now() - Number(localStorage.getItem('cm:onb') || 0) > 86400_000) {
+    if (!guestMode && !state.profile && Date.now() - Number(localStorage.getItem('cm:onb') || 0) > 86400_000) {
       localStorage.setItem('cm:onb', String(Date.now()));
       setTimeout(() => { if (!$('#sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); }, 600);
     }

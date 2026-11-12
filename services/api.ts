@@ -35,6 +35,11 @@ const MAX_SCAN_PAGES = 10;
 
 // ---------- validação (fronteira de confiança: só passa o que está na lista) ----------
 const bad = (field: string): never => { throw new HttpError(400, `INVALID_${field.toUpperCase()}`); };
+/** Hora informada pelo app ao trazer o que foi feito sem conta: só no passado recente; senão, agora. */
+const pastIso = (v: unknown) => {
+  const at = typeof v === 'string' ? Date.parse(v) : NaN;
+  return Number.isFinite(at) && at <= Date.now() && Date.now() - at < 2 * 86400_000 ? new Date(at).toISOString() : nowIso();
+};
 const int = (v: unknown, min: number, max: number, field: string) =>
   Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? (v as number) : bad(field);
 const str = (v: unknown, max: number, field: string) => (typeof v === 'string' && v.length <= max ? v.trim() : bad(field));
@@ -416,7 +421,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       return json(200, (await queryAll(pk, 'SESSION#')).map(pub));
     case 'POST /api/sessions': {
       const b = body();
-      const item = { pk, sk: `SESSION#${newId()}`, gymId: id(b.gymId, 'gymId'), startedAt: nowIso() };
+      const item = { pk, sk: `SESSION#${newId()}`, gymId: id(b.gymId, 'gymId'), startedAt: pastIso(b.startedAt) };
       await getItem(pk, `GYM#${item.gymId}`);
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       return json(201, pub(item));
@@ -449,7 +454,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         const { Item: st } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk, sk: 'SETTINGS' } }));
         if (st?.photoTermsVersion !== PHOTO_TERMS_VERSION) throw new HttpError(403, 'PHOTO_TERMS');
       }
-      const item = { pk, sk: `CLIMB#${climbId}`, sessionId, ...cleanClimb(b, false), photoType, createdAt: nowIso() };
+      const item = { pk, sk: `CLIMB#${climbId}`, sessionId, ...cleanClimb(b, false), photoType, createdAt: pastIso(b.createdAt) };
       await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
       const uploads = photoType && {
         full: await signPost(photoKey(sub, climbId, 'full'), photoType, MAX_FULL),
@@ -736,11 +741,18 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
   throw new HttpError(404, 'ROUTE');
 }
 
+/** "Conta" de quem não entrou: não tem dados, não segue ninguém e não é amigo de ninguém. */
+const ANON = 'anonymous';
+
 export async function handler(event: HttpEvent): Promise<HttpResult> {
   const rid = event.requestContext.requestId;
   try {
     // CSRF: escrita só a partir do próprio site (o JWT já exige login; isto é defesa extra).
     if (event.requestContext.http.method !== 'GET' && !ALLOWED_ORIGINS.includes(event.headers.origin ?? '')) throw new HttpError(403, 'ORIGIN');
+    // Sem login: o link de um boulder compartilhado e o cartão público de um perfil (o mesmo que qualquer
+    // conta vê: nome, @, nível, fixado; histórico só para amigos, e anônimo nunca é amigo).
+    const publicRoute = { 'GET /api/public/shares/{id}': 'GET /api/shares/{id}', 'GET /api/public/users/{handle}': 'GET /api/users/{handle}' }[event.routeKey];
+    if (publicRoute) return await route({ ...event, routeKey: publicRoute }, ANON);
     const sub = event.requestContext.authorizer?.jwt?.claims?.sub;
     if (!sub) throw new HttpError(401, 'UNAUTHORIZED');
     return await route(event, sub);

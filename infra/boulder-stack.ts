@@ -257,6 +257,8 @@ export class BoulderStack extends Stack {
       ['/api/users/{handle}/climbs/{id}/copy', M.POST], ['/api/social', M.GET],
     ];
     for (const [p, method] of routes) httpApi.addRoutes({ path: p, methods: [method], integration, authorizer });
+    // Sem login (o app pode ser usado antes de criar conta): só leitura do que já é público.
+    for (const p of ['/api/public/shares/{id}', '/api/public/users/{handle}']) httpApi.addRoutes({ path: p, methods: [M.GET], integration });
 
     // ---------- Site: CloudFront com S3 e a API na mesma origem ----------
     const certificate = new acm.Certificate(this, 'Cert', { domainName: props.domainName, subjectAlternativeNames: props.aliasDomains, validation: acm.CertificateValidation.fromDns(zone) });
