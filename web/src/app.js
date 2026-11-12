@@ -1313,13 +1313,16 @@ function viewShare(token) {
         playTick();
         toast(t('share.added'));
         location.replace(`#/climb/${climb.id}`);
+        if (sh.owner && !sh.owner.following) setTimeout(() => followSharer(sh.owner), 900);
       } catch (err) { fail(err); e.target.disabled = false; }
     };
     fill(box,
       h('p', { class: 'muted small' }, sh.owner ? t('share.receivedFrom', { n: sh.owner.name }) : t('share.received')),
       h('h1', { class: 'row' }, swatch(sh.color), colorName(sh.color), h('span', { class: 'grade-pill' }, grade(sh.grade))),
       sh.gymName && h('p', { class: 'muted' }, t('share.atGym', { gym: sh.gymName })),
-      sh.owner && h('a', { class: 'row person', href: `#/u/${sh.owner.handle}` }, avatar(sh.owner), h('span', {}, h('strong', {}, sh.owner.name), h('span', { class: 'muted small' }, ` @${sh.owner.handle}`))),
+      sh.owner && h('div', { class: 'row' },
+        h('a', { class: 'row person grow', href: `#/u/${sh.owner.handle}` }, avatar(sh.owner), h('span', {}, h('strong', {}, sh.owner.name), h('span', { class: 'muted small' }, ` @${sh.owner.handle}`))),
+        !sh.mine && followButton(sh.owner)),
       sh.photoUrl && climbStage(sh.photoUrl, sh),
       sh.ai && h('div', { class: 'chips' },
         sh.ai.wallAngle && h('span', { class: 'chip' }, t(`angle.${sh.ai.wallAngle}`)),
@@ -1329,6 +1332,19 @@ function viewShare(token) {
         : h('button', { class: 'btn go big block', type: 'button', onclick: add }, t('share.add')));
   }, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('share.gone') : t('error.generic'))));
   return box;
+}
+
+/** Depois de adicionar um boulder compartilhado: sugere seguir quem mandou. */
+function followSharer(owner) {
+  if (owner.following || $('#sheet').open) return;
+  const btn = followButton(owner, () => setTimeout(() => $('#sheet').close(), 400));
+  btn.classList.add('grow');
+  openSheet(h('div', { class: 'stack center' },
+    avatar(owner, 72),
+    h('h2', {}, t('share.followTitle', { n: owner.name })),
+    h('p', { class: 'muted' }, t('share.followLead')),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn ghost grow', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow')), btn)));
 }
 
 // ---------- foto com zoom ----------
@@ -1859,17 +1875,11 @@ const relTime = (iso) => {
   return fmtDate(iso, { day: 'numeric', month: 'short' });
 };
 const feed = { items: [], next: undefined, loading: false, friends: null };
-/** Exemplos (marcados como exemplo) para o feed vazio mostrar como vai ficar. */
-const FEED_EXAMPLES = [
-  { owner: { name: t('feed.exName1'), handle: 'exemplo' }, color: 'yellow', grade: 3, result: 'flash', ago: 2 },
-  { owner: { name: t('feed.exName2'), handle: 'exemplo' }, color: 'purple', grade: 4, result: 'sent', projectSend: true, ago: 5 },
-  { owner: { name: t('feed.exName3'), handle: 'exemplo' }, color: 'blue', grade: 5, result: 'project', ago: 26 },
-];
 const feedLine = (c) => t(c.result === 'project' ? 'feed.project' : c.projectSend ? 'feed.projectSend' : c.result === 'flash' ? 'feed.flash' : 'feed.sent',
   { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
 
-function feedCard(c, example = false) {
-  const fireBtn = !example && h('button', {
+function feedCard(c) {
+  const fireBtn = h('button', {
     class: `btn small-btn fire-btn ${c.fired ? 'on' : ''}`, type: 'button', 'aria-pressed': String(!!c.fired),
     onclick: async (e) => {
       const b = e.currentTarget;
@@ -1880,17 +1890,17 @@ function feedCard(c, example = false) {
       try { Object.assign(c, await api(`/feed/${c.owner.handle}/${c.id}/fire`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { fail(err); }
     },
   }, '🔥', h('span', {}, c.fire ? ` ${c.fire}` : ''));
-  return h('article', { class: `card feed-card ${example ? 'example' : ''}` },
+  return h('article', { class: 'card feed-card' },
     h('div', { class: 'row feed-head' },
-      example ? avatar(c.owner, 40) : h('a', { href: `#/u/${c.owner.handle}` }, avatar(c.owner, 40)),
+      h('a', { href: `#/u/${c.owner.handle}` }, avatar(c.owner, 40)),
       h('div', { class: 'grow' },
-        h('div', {}, example ? h('strong', {}, c.owner.name) : h('a', { href: `#/u/${c.owner.handle}`, class: 'name-link' }, h('strong', {}, c.owner.name)), ' ', h('span', {}, feedLine(c))),
-        h('div', { class: 'muted small' }, example ? t('feed.ago', { n: c.ago }) : relTime(c.createdAt))),
-      example ? h('span', { class: 'badge' }, t('feed.example')) : h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))),
+        h('div', {}, h('a', { href: `#/u/${c.owner.handle}`, class: 'name-link' }, h('strong', {}, c.owner.name)), ' ', h('span', {}, feedLine(c))),
+        h('div', { class: 'muted small' }, relTime(c.createdAt))),
+      h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))),
     c.photoUrl
       ? climbStage(c.photoUrl, c, () => friendClimbSheet({ handle: c.owner.handle, name: c.owner.name, me: false, friends: true }, { ...c, id: c.rootId }))
       : h('div', { class: 'feed-color', style: { background: SWATCH[c.color] ?? 'var(--surface-2)' } }, h('span', {}, grade(c.grade))),
-    !example && h('div', { class: 'row feed-actions' }, fireBtn, h('span', { class: 'grow' }),
+    h('div', { class: 'row feed-actions' }, fireBtn, h('span', { class: 'grow' }),
       h('button', { class: 'link small', type: 'button', onclick: () => friendClimbSheet({ handle: c.owner.handle, name: c.owner.name, me: false, friends: true }, { ...c, id: c.rootId }) }, t('friends.try'))));
 }
 
@@ -1904,6 +1914,12 @@ function followCard() {
       followButton(p, () => { social.data = null; feed.items = []; feed.next = undefined; })))));
 }
 
+/** Fim da Home (ou Home vazia): achar amigos ou registrar um boulder. */
+const lookingCard = () => h('section', { class: 'card stack' },
+  h('h2', {}, t('feed.lookingTitle')),
+  h('a', { class: 'btn block', href: '#/friends' }, '🔎 ', t('feed.find')),
+  h('button', { class: 'btn block', type: 'button', onclick: () => $('#cam-input').click() }, '📷 ', t('feed.log')));
+
 function viewFeed() {
   const box = h('div', { class: 'stack' });
   const list = h('div', { class: 'stack' });
@@ -1916,8 +1932,8 @@ function viewFeed() {
         h('section', { class: 'card stack' }, h('h2', {}, t('feed.emptyTitle')), h('p', { class: 'muted' }, feed.friends ? t('feed.emptyFriends') : t('feed.emptyLead')),
           h('a', { class: 'btn primary block', href: '#/friends' }, t('feed.find'))),
         followCard(),
-        FEED_EXAMPLES.map((c) => feedCard(c, true)),
       ],
+      feed.next === null && lookingCard(),
       feed.items.length > 0 && feed.items.length < 5 && followCard(),
       feed.loading && h('p', { class: 'small detect-status loading' }, t('friends.loading')),
       feed.next === null && feed.items.length > 0 && h('p', { class: 'muted small center' }, t('feed.end')));
@@ -1933,13 +1949,13 @@ function viewFeed() {
     feed.loading = false; draw();
   };
   if (guestMode) {
-    fill(box, h('h1', {}, t('tab.home')),
+    fill(box, h('h1', {}, 'Chalkmark'),
       h('section', { class: 'card stack' }, h('h2', {}, t('feed.guestTitle')), h('p', { class: 'muted' }, t('feed.guestLead')),
         h('button', { class: 'btn primary block', type: 'button', onclick: () => showAuth({ mode: 'signup' }) }, t('auth.signup'))),
-      FEED_EXAMPLES.map((c) => feedCard(c, true)));
+      lookingCard());
     return box;
   }
-  fill(box, h('h1', {}, t('tab.home')), list, sentinel);
+  fill(box, h('h1', {}, 'Chalkmark'), list, sentinel);
   // Rolagem infinita: carrega a próxima página quando o fim aparece.
   const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) load(); }, { rootMargin: '600px' });
   io.observe(sentinel);

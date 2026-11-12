@@ -550,7 +550,10 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const photoUrl = sh.photoType ? await signGet(photoKey(sh.ownerSub as string, sh.climbId as string, 'full')) : null;
       const { color, grade, holds, tap, ai, createdAt, gymName } = sh;
       const owner = await profileOf(sh.ownerSub as string);
-      return json(200, { color, grade, holds, tap, ai, createdAt, gymName, photoUrl, mine: sh.ownerSub === sub, owner: owner ? await card(owner) : null });
+      const mine = sh.ownerSub === sub;
+      // Quem recebe vê "Seguir" ao lado de quem mandou (como o TikTok faz com quem compartilhou).
+      const following = !mine && sub !== ANON ? await isFollowing(sub, sh.ownerSub as string) : false;
+      return json(200, { color, grade, holds, tap, ai, createdAt, gymName, photoUrl, mine, owner: owner ? { ...(await card(owner)), following } : null });
     }
     case 'POST /api/shares/{id}/accept': {
       const sh = await getShare(pid);
