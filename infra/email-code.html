@@ -1,13 +1,29 @@
-<!-- Modelo do e-mail de código (cadastro e "esqueci a senha"). {####} = código. As quebras de
-     linha são removidas no deploy; só estilo inline (clientes de e-mail ignoram <style>). -->
-<div style="background:#eef1f6;padding:24px 12px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#141833">
-  <div style="max-width:440px;margin:0 auto;background:#ffffff;border:2px solid #d6dcea;border-radius:20px;padding:28px 24px">
-    <p style="margin:0 0 18px;font-size:20px;font-weight:900;color:#2f5bff">Chalkmark</p>
-    <p style="margin:0 0 8px;font-size:16px">Seu código para entrar no Chalkmark:</p>
-    <p style="margin:0 0 20px;font-size:13px;color:#5d6685">Your code to sign in to Chalkmark:</p>
-    <p style="margin:0 0 20px;padding:14px 0;background:#dfe6ff;border-radius:14px;text-align:center;font-size:32px;font-weight:900;letter-spacing:8px;color:#141833">{####}</p>
-    <p style="margin:0 0 6px;font-size:14px;color:#5d6685">Ele vale por pouco tempo. Se não foi você que pediu, ignore este e-mail.</p>
-    <p style="margin:0;font-size:13px;color:#5d6685">It expires soon. If you didn't ask for it, ignore this email.</p>
-  </div>
-  <p style="max-width:440px;margin:14px auto 0;text-align:center;font-size:12px;color:#5d6685">boulder.vsoller.com.br</p>
-</div>
+<!-- Modelo do e-mail de código (cadastro e "esqueci a senha"). {####} = código. Comentários e quebras
+     de linha saem no deploy. Layout em tabela e estilo inline: é o que Gmail, Outlook e Apple Mail
+     renderizam igual. A arte (web/email/banner.png) é servida pelo próprio site. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef1f6;padding:24px 10px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#141833">
+<tr><td align="center">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background:#ffffff;border:2px solid #d6dcea;border-radius:22px;overflow:hidden">
+    <tr><td style="padding:0;line-height:0">
+      <img src="https://boulder.vsoller.com.br/email/banner.png" width="480" alt="Chalkmark" style="display:block;width:100%;max-width:480px;height:auto;border:0">
+    </td></tr>
+    <tr><td style="padding:26px 26px 6px">
+      <p style="margin:0 0 4px;font-size:13px;font-weight:800;color:#2f5bff">Chalkmark</p>
+      <p style="margin:0 0 4px;font-size:24px;line-height:1.2;font-weight:900;color:#141833">Seu código chegou</p>
+      <p style="margin:0;font-size:14px;color:#5d6685">Digite no app para continuar. / Enter it in the app to continue.</p>
+    </td></tr>
+    <tr><td style="padding:18px 26px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#dfe6ff;border:2px dashed #2f5bff;border-radius:16px">
+        <tr><td align="center" style="padding:18px 10px;font-size:34px;font-weight:900;letter-spacing:10px;color:#141833;font-family:'SF Mono',Menlo,Consolas,monospace">{####}</td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:0 26px 24px">
+      <p style="margin:0 0 6px;font-size:14px;line-height:1.5;color:#3a4266">O código vale por pouco tempo. Se não foi você que pediu, pode ignorar este e-mail: sua conta continua protegida.</p>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:#5d6685">The code expires soon. If you didn't ask for it, just ignore this email: your account stays safe.</p>
+    </td></tr>
+    <tr><td style="padding:14px 26px;background:#f5f7fb;border-top:2px solid #e3e8f0">
+      <p style="margin:0;font-size:12px;color:#5d6685">Bora pra parede. 🧗 <a href="https://boulder.vsoller.com.br" style="color:#2f5bff;font-weight:700;text-decoration:none">boulder.vsoller.com.br</a></p>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
