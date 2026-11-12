@@ -71,6 +71,12 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
     if (typeof b.lqip !== 'string' || b.lqip.length > 3000 || !/^data:image\/(webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(b.lqip)) bad('lqip');
     out.lqip = b.lqip;
   }
+  // Formato da foto (largura/altura): o app reserva o espaço antes da imagem chegar.
+  if (has('aspect')) {
+    const ar = Number(b.aspect);
+    if (!(ar >= 0.2 && ar <= 5)) bad('aspect');
+    out.aspect = Math.round(ar * 1000) / 1000;
+  }
   // A via que o app sugeriu antes das correções da pessoa (para medir acerto e treinar).
   if (has('autoHolds')) out.autoHolds = cleanHolds(b.autoHolds).map(({ x, y, w, h }) => ({ x, y, w, h }));
   if (has('detector')) out.detector = oneOf(['yolov8n-freeclimbs-2'] as const, b.detector, 'detector');
@@ -742,7 +748,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const photo = async (c: Record<string, unknown>) => {
         const cid = String(c.sk).split('#')[1];
         return {
-          id: cid, color: c.color, grade: c.grade, result: c.result, status: status(c, cid), createdAt: c.createdAt, holds: c.holds, tap: c.tap, lqip: c.lqip,
+          id: cid, color: c.color, grade: c.grade, result: c.result, status: status(c, cid), createdAt: c.createdAt, holds: c.holds, tap: c.tap, lqip: c.lqip, aspect: c.aspect,
           thumbUrl: c.photoType ? await signGet(photoKey(them, cid, 'thumb')) : null,
           photoUrl: c.photoType ? await signGet(photoKey(them, cid, 'full')) : null,
         };
@@ -862,7 +868,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         const photoOf = root?.photoType ? String(root.sk).slice(6) : null;
         return {
           id: cid, rootId: root ? String(root.sk).slice(6) : cid, owner: await card(people.get(u)!), color: c.color, grade: c.grade, result: c.result, createdAt: c.createdAt,
-          projectSend: !!c.projectId && isSend(c), holds: root?.holds ?? null, lqip: root?.lqip,
+          projectSend: !!c.projectId && isSend(c), holds: root?.holds ?? null, lqip: root?.lqip, aspect: root?.aspect,
           thumbUrl: photoOf ? await signGet(photoKey(u, photoOf, 'thumb')) : null,
           photoUrl: photoOf ? await signGet(photoKey(u, photoOf, 'full')) : null,
           fire: Number(c.fire ?? 0), fired: mine.has(cid),

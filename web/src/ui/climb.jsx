@@ -141,13 +141,13 @@ export function tinyPreview(source) {
 /** Boulders antigos sem prévia: gera de fundo a partir da miniatura (poucos por vez). */
 export async function backfillPreviews() {
   if (guestMode) return;
-  const todo = state.climbs.filter((c) => c.photoType && !c.lqip && c.thumbUrl).slice(0, 30);
+  const todo = state.climbs.filter((c) => c.photoType && c.thumbUrl && (!c.lqip || !c.aspect)).slice(0, 30);
   for (const c of todo) {
     try {
       const bmp = await createImageBitmap(await (await fetch(c.thumbUrl, { cache: 'no-store' })).blob());
-      const lqip = tinyPreview(bmp);
+      const body = { ...(c.lqip ? {} : { lqip: tinyPreview(bmp) }), aspect: bmp.width / bmp.height };
       bmp.close?.();
-      upsert(state.climbs, await api(`/climbs/${c.id}`, { method: 'PATCH', body: { lqip } }));
+      upsert(state.climbs, await api(`/climbs/${c.id}`, { method: 'PATCH', body }));
     } catch { /* tenta de novo na próxima abertura */ }
     await new Promise((r) => setTimeout(r, 400));
   }
@@ -294,6 +294,7 @@ function NewClimbForm({ s }) {
         ...(d.projectId ? { projectId: d.projectId } : {}),
         ...(full ? { photoType: full.type } : {}),
         ...(lqip ? { lqip } : {}),
+        ...(d.canvas ? { aspect: d.canvas.width / d.canvas.height } : {}),
       };
       const before = S.achievements(state.sessions, state.climbs);
       const lvBefore = S.level(myXp()).level;

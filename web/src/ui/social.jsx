@@ -21,9 +21,17 @@ const closeSheet = () => $('#sheet').close();
 export const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
 /** Foto de perfil, ou iniciais num círculo colorido (cor estável pelo @). */
 export function Avatar({ p, size = 40 }) {
-  if (p?.avatarUrl) return <img className="avatar" src={p.avatarUrl} alt="" width={size} height={size} loading="lazy" style={{ '--s': `${size}px` }} />;
   const hue = [...(p?.handle ?? '')].reduce((n, ch) => n + ch.charCodeAt(0), 0) % HOLD_COLORS.length;
-  return <span className="avatar" style={{ '--s': `${size}px`, background: HOLD_COLORS[hue] }}>{initials(p?.name)}</span>;
+  return (
+    <span className="avatar" style={{ '--s': `${size}px`, background: HOLD_COLORS[hue] }}>
+      {initials(p?.name)}
+      {p?.avatarUrl && <AvatarImg src={p.avatarUrl} size={size} />}
+    </span>
+  );
+}
+function AvatarImg({ src, size }) {
+  const [ok, setOk] = useState(false);
+  return <img src={src} alt="" width={size} height={size} loading="lazy" decoding="async" className={ok ? 'in' : undefined} onLoad={() => setOk(true)} onError={(e) => e.currentTarget.remove()} />;
 }
 export const mondayIso = () => new Date(`${S.weekStart(new Date().toISOString())}T00:00:00`).toISOString();
 

@@ -754,3 +754,11 @@ main[data-slide="right"] > * { animation: slide-r .22s ease-out; }
 /* Ajustes: menu de grupos fechados */
 .settings-row { display: flex; align-items: center; gap: 12px; padding: 14px 4px; text-decoration: none; color: inherit; }
 .settings-row.danger strong { color: var(--pink-deep); }
+
+/* Foto de perfil por cima das iniciais: enquanto carrega, aparece o círculo colorido (nada de branco) */
+.avatar { position: relative; overflow: hidden; }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
+.avatar img.in { opacity: 1; }
+/* Foto do boulder: com o formato conhecido, a imagem preenche o espaço reservado */
+.stage[style*="aspect-ratio"] .zoom, .stage[style*="aspect-ratio"] .zoom > img { width: 100%; height: 100%; }
+.stage[style*="aspect-ratio"] .zoom > img { object-fit: cover; }

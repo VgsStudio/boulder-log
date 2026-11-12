@@ -9,7 +9,7 @@ import { refreshPhotos } from './base.jsx';
  *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom.
  *  `z` ({k,x,y}) é guardado por quem usa, para o zoom sobreviver ao redesenho.
  *  `paint` (pincel): arrastar um dedo marca/desmarca as agarras por onde passa (a página não rola). */
-export function Stage({ children, onTap, z: zIn, onLong, paint, detecting = false, lqip }) {
+export function Stage({ children, onTap, z: zIn, onLong, paint, detecting = false, lqip, aspect }) {
   const zRef = useRef(zIn ?? { k: 1, x: 0, y: 0 });
   const z = zIn ?? zRef.current;
   const box = useRef(null);
@@ -120,7 +120,7 @@ export function Stage({ children, onTap, z: zIn, onLong, paint, detecting = fals
   const zoomed = z.k > 1.01;
   return (
     <div ref={box} className={['stage', paint && 'painting', zoomed && 'zoomed', detecting && 'detecting'].filter(Boolean).join(' ')}
-      style={lqip ? { '--lqip': `url("${lqip}")` } : undefined}>
+      style={{ ...(lqip ? { '--lqip': `url("${lqip}")` } : {}), ...(aspect ? { aspectRatio: String(aspect) } : {}) }}>
       <div className="zoom" ref={inner}>{children}</div>
       <button ref={reset} className="zoom-reset" type="button" hidden={!zoomed}>{t('zoom.reset')}</button>
     </div>
@@ -151,7 +151,7 @@ export function CanvasView({ canvas }) {
 
 /** Foto que aparece na hora: começa pela miniatura (leve) e troca pela grande quando ela chega;
  *  se a grande falhar (upload que não terminou), a miniatura fica. */
-export function PhotoImg({ full, thumb }) {
+export function PhotoImg({ full, thumb, onAspect }) {
   const [src, setSrc] = useState(thumb || full);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -162,12 +162,25 @@ export function PhotoImg({ full, thumb }) {
     pre.src = full;
     return () => { pre.onload = null; };
   }, [full, thumb]);
-  return <img src={src} alt="" decoding="async" className={`fade ${loaded ? 'in' : ''}`} onLoad={() => setLoaded(true)} onError={() => { if (src !== full && full) setSrc(full); else refreshPhotos(); }} />;
+  return <img src={src} alt="" decoding="async" className={`fade ${loaded ? 'in' : ''}`} onLoad={(e) => { setLoaded(true); const im = e.currentTarget; if (im.naturalWidth) onAspect?.(im.naturalWidth / im.naturalHeight); }} onError={() => { if (src !== full && full) setSrc(full); else refreshPhotos(); }} />;
 }
 
 /** Foto de um boulder com as agarras da via marcadas. */
+// Formato das fotos já vistas neste aparelho (para boulders que ainda não têm `aspect` no servidor).
+const AR_KEY = 'cm:ar';
+const arCache = (() => { try { return JSON.parse(localStorage.getItem(AR_KEY) || '{}'); } catch { return {}; } })();
+const rememberAspect = (id, ar) => {
+  if (!id || arCache[id]) return;
+  arCache[id] = Math.round(ar * 1000) / 1000;
+  try { localStorage.setItem(AR_KEY, JSON.stringify(arCache)); } catch {}
+};
+/** Foto de um boulder com as agarras da via marcadas. O espaço da foto já fica reservado (sem pular). */
 export const ClimbStage = ({ url, c, onOpen }) => (url
-  ? <Stage onTap={onOpen ? () => onOpen() : undefined} lqip={c?.lqip}><PhotoImg full={url} thumb={c.thumbUrl} /><Overlay holds={c.holds} /></Stage>
+  ? (
+    <Stage onTap={onOpen ? () => onOpen() : undefined} lqip={c?.lqip} aspect={c?.aspect ?? arCache[c?.id]}>
+      <PhotoImg full={url} thumb={c.thumbUrl} onAspect={(ar) => rememberAspect(c.id, ar)} /><Overlay holds={c.holds} />
+    </Stage>
+  )
   : null);
 
 /** Setas nas laterais da foto e arrasto horizontal; `go(+1|-1)` troca de boulder. */

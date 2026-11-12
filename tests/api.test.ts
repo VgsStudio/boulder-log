@@ -41,3 +41,10 @@ test('prévia minúscula (lqip): só data URL de imagem pequena', () => {
   assert.throws(() => cleanClimb({ lqip: 'data:image/svg+xml;base64,PHN2Zz4=' }, true), /INVALID_LQIP/);
   assert.throws(() => cleanClimb({ lqip: `data:image/webp;base64,${'A'.repeat(3000)}` }, true), /INVALID_LQIP/);
 });
+
+test('formato da foto (aspect): número entre 0,2 e 5', () => {
+  assert.equal(cleanClimb({ aspect: 0.75 }, true).aspect, 0.75);
+  assert.equal(cleanClimb({ aspect: 1.33333 }, true).aspect, 1.333);
+  assert.throws(() => cleanClimb({ aspect: 9 }, true), /INVALID_ASPECT/);
+  assert.throws(() => cleanClimb({ aspect: 'x' }, true), /INVALID_ASPECT/);
+});
