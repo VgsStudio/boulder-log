@@ -12,7 +12,7 @@ import { Session } from './session.jsx';
 import { NewClimb, ClimbView, ShareView, onCameraPhoto } from './climb.jsx';
 import { History, Progress } from './history.jsx';
 import { Feed, Me, Friends, User } from './social.jsx';
-import { settingsSheet } from './settings.jsx';
+import { settingsSheet, SettingsPage } from './settings.jsx';
 import { Bell } from './inbox.jsx';
 
 // ---------- estado da casca ----------
@@ -32,6 +32,7 @@ const ROUTES = [
   [/^#\/feed$/, () => <Feed />, 'feed', 'home'],
   [/^#\/me$/, () => <Me />, 'profile', 'my_profile'],
   [/^#\/friends$/, () => <Friends />, 'ranking', 'friends'],
+  [/^#\/settings(?:\/([a-z]+))?$/, (group) => <SettingsPage group={group} />, 'profile', 'settings'],
   [/^#\/u\/([a-z0-9_.]{3,20})$/, (handle) => <User handle={handle} />, 'profile', 'user_profile'],
 ];
 // Home (feed) fora da barra enquanto há poucos usuários: a rota #/feed continua existindo.
@@ -90,7 +91,7 @@ const Screen = ({ children }) => children;
 
 /** Ajustes: engrenagem que fica no perfil (antes ficava na barra de cima). */
 export const SettingsButton = () => (
-  <button className="icon-btn settings-btn" id="open-settings" type="button" aria-label={t('settings.title')} onClick={settingsSheet}>
+  <button className="icon-btn settings-btn" id="open-settings" type="button" aria-label={t('settings.title')} onClick={() => settingsSheet()}>
     <svg className="gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx={12} cy={12} r={3} /></svg>
   </button>
 );

@@ -750,3 +750,7 @@ main[data-slide="right"] > * { animation: slide-r .22s ease-out; }
 @media (prefers-reduced-motion: reduce) { main[data-slide] > * { animation: none; } }
 .profile-actions { gap: 8px; }
 .profile-actions .btn { white-space: nowrap; padding: 0 14px; }
+
+/* Ajustes: menu de grupos fechados */
+.settings-row { display: flex; align-items: center; gap: 12px; padding: 14px 4px; text-decoration: none; color: inherit; }
+.settings-row.danger strong { color: var(--pink-deep); }

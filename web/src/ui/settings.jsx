@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, lang, langChoice, setLang, t } from '../i18n.js';
 import { playResult, setSound, soundOn } from '../sound.js';
 import * as S from '../stats.js';
-import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce, myXp } from '../core.js';
+import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce, myXp, emit } from '../core.js';
 import { celebrate } from './game.jsx';
 import { render, showAuth } from '../app.js';
 import { SHARE_ICON } from '../game.js';
@@ -19,16 +19,55 @@ const Field = ({ label, children }) => <div><div className="small muted">{label}
 export const Terms = () => <ul className="terms">{['private', 'rights', 'people', 'training', 'delete', 'remove'].map((k) => <li key={k}>{t(`terms.${k}`)}</li>)}</ul>;
 
 // ---------- ajustes ----------
-export const settingsSheet = () => openSheet(<Settings />);
+/** Ajustes viram páginas: #/settings (menu) e #/settings/<grupo>. */
+export const settingsSheet = (group = '') => { location.hash = group ? `#/settings/${group}` : '#/settings'; };
 
-function Settings() {
+/** Grupos do menu, na ordem. */
+const GROUPS = () => [
+  ['climbing', t('settings.climbing'), t('settings.climbingHint')],
+  ['look', t('settings.look'), t('settings.lookHint')],
+  ['sound', t('settings.soundGroup'), t('settings.soundHint')],
+  !guestMode && ['push', t('push.settings'), t('settings.pushHint')],
+  ['privacy', t('settings.privacy'), t('settings.privacyHint')],
+  ['account', t('settings.account'), t('settings.accountHint')],
+  !guestMode && ['danger', t('danger.title'), t('settings.dangerHint')],
+].filter(Boolean);
+
+/** Página dos Ajustes: sem grupo, o menu; com grupo, só aquele grupo. */
+export function SettingsPage({ group }) {
+  const g = GROUPS().find(([k]) => k === group);
+  if (!g) {
+    return (
+      <div className="stack settings">
+        <div className="row"><button className="link" type="button" onClick={() => history.back()}>‹ {t('back')}</button></div>
+        <h1>{t('settings.title')}</h1>
+        <ul className="list card settings-menu">
+          {GROUPS().map(([k, title, hint]) => (
+            <li key={k}><a className={`settings-row ${k === 'danger' ? 'danger' : ''}`} href={`#/settings/${k}`}>
+              <div className="grow"><strong>{title}</strong><div className="muted small">{hint}</div></div><span className="muted">›</span>
+            </a></li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  return (
+    <div className="stack settings">
+      <div className="row"><button className="link" type="button" onClick={() => history.back()}>‹ {t('settings.title')}</button></div>
+      <h1>{g[1]}</h1>
+      <Group k={group} />
+    </div>
+  );
+}
+
+function Group({ k }) {
   const [st, setSt] = useState(() => ({ ...state.settings }));
   const [, redraw] = useState(0);
-  // Preferências salvam sozinhas (sem botão de salvar).
+  // Salva sozinho (sem botão de salvar).
   const save = useRef(debounce(async (v) => {
     try {
       state.settings = { ...state.settings, ...(await api('/settings', { method: 'PUT', body: { scale: v.scale, weeklySessions: v.weeklySessions, gradeGoal: v.gradeGoal } })) };
-      render();
+      emit();
     } catch (err) { fail(err); }
   }, 600)).current;
   const change = (patch) => { const v = { ...st, ...patch }; setSt(v); save(v); };
@@ -39,71 +78,63 @@ function Settings() {
       <button className="btn block" type="button" onClick={closeSheet}>{t('settings.close')}</button>
     </div>,
   );
-  return (
-    <div className="stack settings">
-      <h2>{t('settings.title')}</h2>
-
-      <section className="settings-group">
-        <h3>{t('settings.climbing')}</h3>
-        <Field label={t('settings.scale')}><Seg options={[['v', 'V (Hueco)'], ['font', 'Font']]} value={st.scale} onPick={(v) => change({ scale: v })} /></Field>
-        <div className="row"><span className="grow">{t('settings.weekly')}</span>
-          <Stepper value={st.weeklySessions} min={0} max={7} onChange={(n) => change({ weeklySessions: n })} label={t('settings.weekly')} />
-        </div>
-        <label className="field"><span>{t('settings.gradeGoal')}</span>
-          <select value={st.gradeGoal ?? ''} onChange={(e) => change({ gradeGoal: e.target.value === '' ? null : Number(e.target.value) })}>
-            <option value="">{t('settings.none')}</option>
-            {S.GRADES.map((g) => <option key={g} value={String(g)}>{S.gradeLabel(g, st.scale)}</option>)}
-          </select>
-        </label>
-      </section>
-
-      <section className="settings-group">
-        <h3>{t('settings.look')}</h3>
-        <Field label={t('settings.lang')}><Seg options={[['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']]} value={langChoice()} onPick={(v) => setLang(v)} /></Field>
-        <Field label={t('settings.theme')}><Seg options={[['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]]} value={getTheme()} onPick={(v) => { setTheme(v); redraw((n) => n + 1); }} /></Field>
-      </section>
-
-      <section className="settings-group">
-        <h3>{t('settings.soundGroup')}</h3>
-        <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playResult('sent'); redraw((n) => n + 1); }} /></Field>
-      </section>
-
-      {!guestMode && <section className="settings-group"><h3>{t('push.settings')}</h3><PushSettings /></section>}
-
-      <section className="settings-group">
-        <h3>{t('settings.privacy')}</h3>
-        <Field label={t('settings.stats')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={statsOn() ? 'on' : 'off'} onPick={(v) => { setStats(v === 'on'); redraw((n) => n + 1); }} /></Field>
-      </section>
-
-      <section className="settings-group">
-        <h3>{t('settings.account')}</h3>
-        {guestMode
-          ? <>
-            <button className="btn primary block" type="button" onClick={() => { closeSheet(); showAuth({ mode: 'signup' }); }}>{t('auth.signup')}</button>
-            <button className="btn block" type="button" onClick={() => { closeSheet(); showAuth({ mode: 'login' }); }}>{t('guest.haveAccount')}</button>
-          </>
-          : <>
-            {canInstall() && <button className="btn primary block" type="button" onClick={installSheet}>{t('install.button')}</button>}
-            <button className="btn block" type="button" onClick={() => feedbackSheet()}>{t('fb.menu')}</button>
-            <button className="btn block" type="button" onClick={logout}>{t('settings.logout')}</button>
-          </>}
-        <p className="small legal-links">
-          <button className="link small" type="button" onClick={terms}>{t('terms.view')}</button>
-          {' · '}<a href="/termos.html" target="_blank">{t('legal.terms')}</a>{' · '}<a href="/privacidade.html" target="_blank">{t('legal.privacy')}</a>
-        </p>
-      </section>
-
-      {!guestMode && (
-        <section className="danger-zone">
-          <h3>{t('danger.title')}</h3>
-          <p className="small">{t('danger.lead')}</p>
-          <button className="btn danger-fill block" type="button" onClick={deleteAccountSheet}>{t('account.delete')}</button>
-        </section>
-      )}
-
-      <button className="btn ghost block" type="button" onClick={closeSheet}>{t('settings.close')}</button>
-    </div>
+  if (k === 'climbing') return (
+    <section className="settings-group">
+      <Field label={t('settings.scale')}><Seg options={[['v', 'V (Hueco)'], ['font', 'Font']]} value={st.scale} onPick={(v) => change({ scale: v })} /></Field>
+      <div className="row"><span className="grow">{t('settings.weekly')}</span>
+        <Stepper value={st.weeklySessions} min={0} max={7} onChange={(n) => change({ weeklySessions: n })} label={t('settings.weekly')} />
+      </div>
+      <label className="field"><span>{t('settings.gradeGoal')}</span>
+        <select value={st.gradeGoal ?? ''} onChange={(e) => change({ gradeGoal: e.target.value === '' ? null : Number(e.target.value) })}>
+          <option value="">{t('settings.none')}</option>
+          {S.GRADES.map((g) => <option key={g} value={String(g)}>{S.gradeLabel(g, st.scale)}</option>)}
+        </select>
+      </label>
+    </section>
   );
+  if (k === 'look') return (
+    <section className="settings-group">
+      <Field label={t('settings.lang')}><Seg options={[['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']]} value={langChoice()} onPick={(v) => setLang(v)} /></Field>
+      <Field label={t('settings.theme')}><Seg options={[['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]]} value={getTheme()} onPick={(v) => { setTheme(v); redraw((n) => n + 1); }} /></Field>
+    </section>
+  );
+  if (k === 'sound') return (
+    <section className="settings-group">
+      <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playResult('sent'); redraw((n) => n + 1); }} /></Field>
+    </section>
+  );
+  if (k === 'push') return <section className="settings-group"><PushSettings /></section>;
+  if (k === 'privacy') return (
+    <section className="settings-group">
+      <Field label={t('settings.stats')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={statsOn() ? 'on' : 'off'} onPick={(v) => { setStats(v === 'on'); redraw((n) => n + 1); }} /></Field>
+      <p className="small muted"><a href="/privacidade.html" target="_blank">{t('legal.privacy')}</a></p>
+    </section>
+  );
+  if (k === 'account') return (
+    <section className="settings-group">
+      {guestMode
+        ? <>
+          <button className="btn primary block" type="button" onClick={() => showAuth({ mode: 'signup' })}>{t('auth.signup')}</button>
+          <button className="btn block" type="button" onClick={() => showAuth({ mode: 'login' })}>{t('guest.haveAccount')}</button>
+        </>
+        : <>
+          {canInstall() && <button className="btn primary block" type="button" onClick={installSheet}>{t('install.button')}</button>}
+          <button className="btn block" type="button" onClick={() => feedbackSheet()}>{t('fb.menu')}</button>
+          <button className="btn block" type="button" onClick={logout}>{t('settings.logout')}</button>
+        </>}
+      <p className="small legal-links">
+        <button className="link small" type="button" onClick={terms}>{t('terms.view')}</button>
+        {' · '}<a href="/termos.html" target="_blank">{t('legal.terms')}</a>{' · '}<a href="/privacidade.html" target="_blank">{t('legal.privacy')}</a>
+      </p>
+    </section>
+  );
+  if (k === 'danger') return (
+    <section className="danger-zone">
+      <p className="small">{t('danger.lead')}</p>
+      <button className="btn danger-fill block" type="button" onClick={deleteAccountSheet}>{t('account.delete')}</button>
+    </section>
+  );
+  return null;
 }
 
 // ---------- mini tutorial (tela escura com destaque) ----------

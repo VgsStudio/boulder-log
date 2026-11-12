@@ -195,7 +195,7 @@ function SwipeRow({ children, enabled, label, onAction }) {
 // ---------- evolução ----------
 export function GoalsCard() {
   const { weeklySessions, gradeGoal } = state.settings;
-  if (!weeklySessions && gradeGoal == null) return <button className="link" type="button" onClick={settingsSheet}>+ {t('goal.set')}</button>;
+  if (!weeklySessions && gradeGoal == null) return <button className="link" type="button" onClick={() => settingsSheet('climbing')}>+ {t('goal.set')}</button>;
   const n = S.sessionsThisWeek(state.sessions);
   const reached = S.goalReachedAt(state.climbs, gradeGoal);
   const best = Math.max(-1, ...state.climbs.filter(S.isSend).map((c) => c.grade));
