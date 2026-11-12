@@ -631,3 +631,14 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 
 .push-ask { text-align: left; }
 .push-bell { font-size: 2.6rem; line-height: 1; }
+
+/* Botão de câmera no centro da barra de abas */
+.tabbar { grid-template-columns: repeat(5, 1fr); }
+.tab-cam { display: grid; place-items: center; cursor: pointer; }
+.cam-btn {
+  width: 56px; height: 56px; margin-top: -22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--blue); color: #fff; box-shadow: 0 4px 0 var(--blue-deep), 0 6px 16px rgb(47 91 255 / .35);
+  border: 3px solid var(--surface);
+}
+.cam-btn svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.tab-cam:active .cam-btn { transform: translateY(2px); box-shadow: 0 2px 0 var(--blue-deep); }

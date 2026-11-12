@@ -620,6 +620,7 @@ function activeSessionView(s) {
         summary.maxGrade != null && h('span', {}, `max ${grade(summary.maxGrade)}`),
         h('span', { class: 'xp-chip' }, t('xp.gain', { n: S.totalXp(state.climbs.filter((c) => c.sessionId === s.id)) })))),
     h('a', { class: 'btn go big block', href: '#/new' }, `+ ${t('session.add')}`),
+    h('button', { class: 'btn block', type: 'button', onclick: () => quickLogSheet(s) }, t('quick.button')),
     climbs.length
       ? h('ul', { class: 'list card' }, climbs.map(climbRow))
       : h('p', { class: 'muted' }, t('session.empty')),
@@ -690,6 +691,62 @@ function ensurePhotoTerms() {
 }
 
 // ---------- tela: novo boulder ----------
+/** Foto escolhida pelo botão de câmera da barra, à espera da tela de novo boulder. */
+let pendingPhoto = null;
+
+/** Botão de câmera (centro da barra): foto → novo boulder; sem sessão, abre uma no último ginásio. */
+async function onCameraPhoto(file) {
+  if (!file) return;
+  let s = activeSession();
+  if (!s) {
+    const gymId = (() => { try { return localStorage.getItem('bl:gym'); } catch { return null; } })();
+    const gym = gymOf(gymId) ?? state.gyms[0];
+    if (!gym) { toast(t('cam.needGym')); location.hash = '#/'; return; }
+    try {
+      s = await api('/sessions', { method: 'POST', body: { gymId: gym.id } });
+      state.sessions.push(s);
+      toast(t('cam.sessionStarted', { g: gym.name }));
+    } catch (err) { fail(err); return; }
+  }
+  pendingPhoto = file;
+  if (location.hash === '#/new') render(); else location.hash = '#/new';
+}
+
+/** Registro rápido: cor, grau e resultado numa janela, sem foto. */
+function quickLogSheet(s) {
+  const lastGrade = [...state.climbs].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.grade ?? 3;
+  const q = { color: null, grade: lastGrade, result: 'sent' };
+  const box = h('div', { class: 'stack' });
+  const draw = () => fill(box,
+    h('h2', {}, t('quick.title')),
+    h('div', { class: 'chips', role: 'group', 'aria-label': t('climb.color') }, COLORS.map((c) =>
+      h('button', { class: 'chip', type: 'button', 'aria-pressed': String(q.color === c), onclick: () => { q.color = c; draw(); } }, swatch(c), colorName(c)))),
+    h('div', { class: 'chips scroll', role: 'group', 'aria-label': t('climb.grade') }, S.GRADES.map((g) =>
+      h('button', { class: 'chip grade', type: 'button', 'aria-pressed': String(q.grade === g), onclick: () => { q.grade = g; draw(); } }, grade(g)))),
+    seg(RESULTS.map((r) => [r, t(`result.${r}`)]), q.result, (r) => { q.result = r; draw(); }),
+    h('button', {
+      class: 'btn primary big block', type: 'button', disabled: !q.color,
+      onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        const before = S.achievements(state.sessions, state.climbs);
+        const lvBefore = S.level(S.totalXp(state.climbs)).level;
+        try {
+          const { climb } = await api('/climbs', { method: 'POST', body: { sessionId: s.id, color: q.color, grade: q.grade, attempts: 1, result: q.result } });
+          state.climbs.push(climb);
+          $('#sheet').close();
+          const lvAfter = S.level(S.totalXp(state.climbs)).level;
+          celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: S.isSend(climb) });
+          render();
+          if (guestMode) setTimeout(needAccount, 1600);
+        } catch (err) { fail(err); e.target.disabled = false; }
+      },
+    }, q.color ? t('quick.save', { c: colorName(q.color).toLowerCase(), g: grade(q.grade) }) : t('quick.pickColor')),
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')));
+  draw();
+  openSheet(box);
+  requestAnimationFrame(() => box.querySelector('.chip.grade[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
+}
+
 function viewNew() {
   const s = activeSession();
   if (!s) { location.hash = '#/'; return h('div'); }
@@ -907,6 +964,8 @@ function viewNew() {
   draw();
   // Grau atual visível na faixa rolável.
   requestAnimationFrame(() => root.querySelector('.chip.grade[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
+  // Veio do botão de câmera: já processa a foto.
+  if (pendingPhoto) { const file = pendingPhoto; pendingPhoto = null; setTimeout(() => pickPhoto({ target: { files: [file], value: '' } }), 0); }
   return root;
 }
 
@@ -2269,6 +2328,8 @@ async function boot() {
   $('#open-settings').setAttribute('aria-label', t('settings.title'));
   $('#open-settings').addEventListener('click', settingsSheet);
   $('#streak-pill').addEventListener('click', streakSheet);
+  $('#tab-cam').setAttribute('aria-label', t('cam.label'));
+  $('#cam-input').addEventListener('change', (e) => { const f = e.target.files?.[0]; e.target.value = ''; onCameraPhoto(f); });
   $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   // Service worker: abre sem sinal e recebe notificações.
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('sw', e));
