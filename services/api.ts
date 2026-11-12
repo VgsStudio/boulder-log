@@ -333,7 +333,12 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
     case 'PATCH /api/sessions/{id}': {
       const b = body();
       const f: Record<string, unknown> = {};
-      if (b.end === true) f.endedAt = nowIso();
+      if (b.end === true) {
+        // Encerramento automático (saiu do ginásio / esqueceu aberta) informa a hora da última atividade.
+        const at = typeof b.endedAt === 'string' ? Date.parse(b.endedAt) : NaN;
+        f.endedAt = Number.isFinite(at) && at <= Date.now() && Date.now() - at < 2 * 86400_000 ? new Date(at).toISOString() : nowIso();
+        if (b.auto !== undefined) f.autoEnded = oneOf(['left', 'idle'] as const, b.auto, 'auto');
+      }
       if (b.feeling !== undefined) f.feeling = int(b.feeling, 1, 5, 'feeling');
       if (b.note !== undefined) f.note = str(b.note, 500, 'note');
       return json(200, pub(await patch(pk, `SESSION#${id(pid, 'id')}`, f)));

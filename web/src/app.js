@@ -432,7 +432,7 @@ function achievementsCard() {
 const getPos = () => new Promise((resolve) => {
   if (!navigator.geolocation) return resolve(null);
   navigator.geolocation.getCurrentPosition(
-    (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+    (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }),
     () => resolve(null),
     { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60_000 },
   );
@@ -440,6 +440,35 @@ const getPos = () => new Promise((resolve) => {
 const geoGranted = async () => {
   try { return (await navigator.permissions.query({ name: 'geolocation' })).state === 'granted'; } catch { return false; }
 };
+
+// ---------- encerramento automático da sessão ----------
+// Site não acompanha a localização com o app fechado: a conferência roda ao abrir o app, ao voltar
+// para ele e a cada 5 min enquanto está aberto.
+const LEFT_KM = 1; // GPS dentro de ginásio erra centenas de metros
+const IDLE_MS = 4 * 3600_000; // sem registrar boulder por 4 h = sessão esquecida aberta
+let autoEndBusy = false;
+async function checkAutoEnd() {
+  const s = activeSession();
+  if (!s || autoEndBusy || document.visibilityState !== 'visible') return;
+  autoEndBusy = true;
+  try {
+    const last = [s.startedAt, ...state.climbs.filter((c) => c.sessionId === s.id).map((c) => c.createdAt)].sort().at(-1);
+    if (Date.now() - Date.parse(last) > IDLE_MS) return await autoEnd(s, 'idle', last);
+    const gym = gymOf(s.gymId);
+    if (!gym?.loc || !(await geoGranted())) return;
+    const pos = await getPos();
+    if (pos && pos.acc < 800 && S.distanceKm(gym.loc, pos) > LEFT_KM) await autoEnd(s, 'left', new Date().toISOString());
+  } finally { autoEndBusy = false; }
+}
+async function autoEnd(s, reason, endedAt) {
+  const prev = { ...s };
+  upsert(state.sessions, { id: s.id, endedAt, autoEnded: reason });
+  render();
+  try {
+    upsert(state.sessions, await api(`/sessions/${s.id}`, { method: 'PATCH', body: { end: true, endedAt, auto: reason } }));
+    toast(t(reason === 'left' ? 'session.autoLeft' : 'session.autoIdle'));
+  } catch (err) { upsert(state.sessions, { ...prev, endedAt: undefined, autoEnded: undefined }); render(); fail(err); }
+}
 
 // ---------- tela: sessão ----------
 function viewSession() {
@@ -1674,8 +1703,11 @@ async function boot() {
     if (document.visibilityState === 'visible' && Date.now() - state.loadedAt > 45 * 60_000) {
       try { await loadAll(); render(); } catch {}
     }
+    checkAutoEnd();
   });
   render();
+  checkAutoEnd();
+  setInterval(checkAutoEnd, 5 * 60_000);
 }
 
 boot().catch(fail);
