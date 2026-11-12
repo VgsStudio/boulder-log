@@ -779,6 +779,7 @@ function viewNew() {
         Object.assign(d, { boxes, detect: 'done' });
         if (d.tap) applyTap(d.tap.x, d.tap.y);
         draw();
+        setTimeout(() => runTour('cm:tourPhoto', [{ el: 'main .stage', text: t('tour.photo') }]), 300);
       }, (err) => {
         console.error(err);
         if (d.canvas === canvas) { d.detect = 'failed'; draw(); }
@@ -1959,6 +1960,93 @@ function settingsSheet() {
   openSheet(box);
 }
 
+// ---------- mini tutorial (tela escura com destaque) ----------
+let tourRunning = false;
+const seen = (k) => { try { return !!localStorage.getItem(k); } catch { return true; } };
+const markSeen = (k) => { try { localStorage.setItem(k, '1'); } catch {} };
+/** Passos { el: seletor | () => elemento, text }: escurece a tela, recorta o elemento e mostra o balão.
+ *  Passo sem elemento visível é pulado. Roda uma vez por `key`. */
+function runTour(key, steps, onDone = () => {}) {
+  if (tourRunning || seen(key)) return false;
+  const find = (s) => { const el = typeof s.el === 'function' ? s.el() : document.querySelector(s.el); return el && el.getClientRects().length ? el : null; };
+  const list = steps.filter(find);
+  if (!list.length) return false;
+  tourRunning = true;
+  markSeen(key);
+  const hole = h('div', { class: 'tour-hole' });
+  const bubble = h('div', { class: 'tour-bubble', role: 'dialog', 'aria-live': 'polite' });
+  const layer = h('div', { class: 'tour' }, hole, bubble);
+  document.body.append(layer);
+  let i = 0;
+  const end = () => { layer.remove(); window.removeEventListener('resize', place); tourRunning = false; onDone(); };
+  const place = () => {
+    const el = find(list[i]);
+    if (!el) { next(); return; }
+    const r = el.getBoundingClientRect(), pad = 8;
+    Object.assign(hole.style, { left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+    // Balão abaixo do elemento, ou acima se não couber.
+    const below = r.bottom + 16 + 140 < innerHeight;
+    bubble.style.top = below ? `${r.bottom + 16}px` : 'auto';
+    bubble.style.bottom = below ? 'auto' : `${innerHeight - r.top + 16}px`;
+  };
+  const next = () => { i++; if (i >= list.length) end(); else show(); };
+  const show = () => {
+    const el = find(list[i]);
+    el?.scrollIntoView({ block: 'center', behavior: 'instant' });
+    fill(bubble,
+      h('p', {}, list[i].text),
+      h('div', { class: 'row' },
+        h('span', { class: 'small muted grow num' }, `${i + 1}/${list.length}`),
+        list.length > 1 && i < list.length - 1 && h('button', { class: 'link small', type: 'button', onclick: end }, t('tour.skip')),
+        h('button', { class: 'btn primary small-btn', type: 'button', onclick: next }, i < list.length - 1 ? t('tour.next') : t('tour.done'))));
+    requestAnimationFrame(place);
+  };
+  layer.addEventListener('click', (e) => { if (e.target === layer || e.target === hole) next(); });
+  window.addEventListener('resize', place);
+  show();
+  return true;
+}
+
+/** Tutorial da primeira abertura: câmera, sessão, sequência, evolução, perfil e ajustes. */
+function appTour(onDone) {
+  return runTour('cm:tour', [
+    { el: '#tab-cam', text: t('tour.cam') },
+    { el: () => [...document.querySelectorAll('main .btn.primary.big, main .btn.go.big')][0], text: t('tour.session') },
+    { el: '#streak-pill:not([hidden])', text: t('tour.streak') },
+    { el: '#tabbar a[data-tab="progress"]', text: t('tour.progress') },
+    { el: '#tabbar a[data-tab="profile"]', text: t('tour.profile') },
+    { el: '#open-settings', text: t('tour.settings') },
+  ], onDone);
+}
+
+// ---------- instalar na tela inicial ----------
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+let installEvent = null; // Android/Chrome: o navegador entrega um "prompt" de instalação
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; });
+/** Convite para instalar (uma vez por semana, até instalar). Devolve true se mostrou. */
+function maybeAskInstall() {
+  if (standalone() || $('#sheet').open || tourRunning) return false;
+  if (!isIOS() && !installEvent) return false;
+  if (Date.now() - Number(localStorage.getItem('cm:installAsk') || 0) < 7 * 86400_000) return false;
+  try { localStorage.setItem('cm:installAsk', String(Date.now())); } catch {}
+  openSheet(h('div', { class: 'stack' },
+    h('img', { class: 'auth-logo', src: '/icon.svg', alt: '', width: 72, height: 72 }),
+    h('h2', {}, t('install.title')),
+    h('p', { class: 'muted' }, t('install.lead')),
+    isIOS()
+      ? h('ol', { class: 'install-steps' },
+        h('li', {}, t('install.ios1'), ' ', h('span', { class: 'ios-share', 'aria-hidden': 'true' }, lineIcon(SHARE_ICON))),
+        h('li', {}, t('install.ios2')),
+        h('li', {}, t('install.ios3')))
+      : h('button', {
+        class: 'btn primary big block', type: 'button',
+        onclick: async () => { $('#sheet').close(); installEvent?.prompt(); installEvent = null; },
+      }, t('install.button')),
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('guest.notNow'))));
+  return true;
+}
+
 // ---------- notificações (Web Push) ----------
 // iPhone: só com o app instalado na tela inicial (iOS 16.4+). O pedido de permissão precisa de um toque.
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -1982,7 +2070,7 @@ async function enablePush() {
 
 /** Na abertura: com permissão dada, mantém a assinatura em dia (1x por dia); sem, pede com um convite. */
 function maybeAskPush() {
-  if (guestMode || !pushSupported() || $('#sheet').open) return;
+  if (guestMode || !pushSupported() || $('#sheet').open || tourRunning) return;
   if (Notification.permission === 'granted') {
     if (Date.now() - Number(localStorage.getItem('cm:pushSync') || 0) > 86400_000) enablePush().catch((e) => console.warn('push', e));
     return;
@@ -2377,11 +2465,15 @@ async function boot() {
   try {
     if (!guestMode && !state.profile && Date.now() - Number(localStorage.getItem('cm:onb') || 0) > 86400_000) {
       localStorage.setItem('cm:onb', String(Date.now()));
-      setTimeout(() => { if (!$('#sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); }, 600);
+      const welcome = () => { if (!$('#sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); };
+      setTimeout(() => (tourRunning ? setTimeout(welcome, 15000) : welcome()), 600);
     }
   } catch {}
-  setTimeout(maybeAskPush, 2500);
-  setTimeout(maybeAskFeedback, 6000);
+  setTimeout(() => {
+    const afterTour = () => setTimeout(() => { if (!maybeAskInstall()) maybeAskPush(); }, 600);
+    if (!appTour(afterTour)) afterTour();
+  }, 900);
+  setTimeout(() => { if (!tourRunning) maybeAskFeedback(); }, 8000);
   setInterval(checkAutoEnd, 5 * 60_000);
 }
 

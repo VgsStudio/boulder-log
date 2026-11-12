@@ -642,3 +642,20 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 }
 .cam-btn svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 .tab-cam:active .cam-btn { transform: translateY(2px); box-shadow: 0 2px 0 var(--blue-deep); }
+
+/* Mini tutorial: tela escura com recorte no elemento e um balão */
+.tour { position: fixed; inset: 0; z-index: 60; }
+.tour-hole {
+  position: fixed; border-radius: 16px; box-shadow: 0 0 0 9999px rgb(8 10 25 / .74); pointer-events: none;
+  transition: left .25s, top .25s, width .25s, height .25s; outline: 2px solid rgb(255 255 255 / .7);
+}
+.tour-bubble {
+  position: fixed; left: 16px; right: 16px; max-width: 420px; margin: 0 auto; background: var(--surface); color: var(--text);
+  border: 2px solid var(--line); border-radius: 18px; padding: 14px 16px; box-shadow: 0 6px 0 var(--line);
+}
+.tour-bubble p { margin: 0 0 10px; font-weight: 600; line-height: 1.4; }
+.tour-bubble .row { gap: 10px; align-items: center; }
+@media (prefers-reduced-motion: reduce) { .tour-hole { transition: none; } }
+.install-steps { margin: 0; padding-left: 22px; line-height: 1.9; font-weight: 600; }
+.ios-share { display: inline-grid; vertical-align: middle; color: var(--blue); }
+.ios-share .line-ico { width: 20px; height: 20px; }
