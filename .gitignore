@@ -8,3 +8,6 @@ scripts/.cache/
 *.log
 .DS_Store
 dist/
+
+# conjunto de treino (fotos de usuários): nunca vai para o git
+ml/data/

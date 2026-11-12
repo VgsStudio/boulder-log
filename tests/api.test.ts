@@ -26,3 +26,10 @@ test('cleanHolds: guarda início/topo e recusa papel inventado', () => {
   assert.throws(() => cleanHolds(Array(81).fill({ x: 0.1, y: 0.1, w: 0.1, h: 0.1 })));
   assert.equal(cleanHolds(Array(300).fill({ x: 0.1, y: 0.1, w: 0.1, h: 0.1 }), 300).length, 300);
 });
+
+test('cleanClimb: via sugerida e detector entram validados', () => {
+  const out = cleanClimb({ autoHolds: [{ x: 0.1, y: 0.1, w: 0.1, h: 0.1, role: 'start' }], detector: 'yolov8n-freeclimbs-2' }, true);
+  assert.deepEqual(out.autoHolds, [{ x: 0.1, y: 0.1, w: 0.1, h: 0.1 }]);
+  assert.equal(out.detector, 'yolov8n-freeclimbs-2');
+  assert.throws(() => cleanClimb({ detector: 'outro' }, true));
+});

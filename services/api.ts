@@ -60,6 +60,9 @@ export function cleanClimb(b: Record<string, unknown>, partial: boolean) {
   // Todas as agarras que o detector achou na foto (para treinar um modelo próprio no futuro:
   // `holds` diz quais dessas são da via, corrigidas pela pessoa).
   if (has('cands')) out.cands = cleanHolds(b.cands, 300).map(({ x, y, w, h }) => ({ x, y, w, h }));
+  // A via que o app sugeriu antes das correções da pessoa (para medir acerto e treinar).
+  if (has('autoHolds')) out.autoHolds = cleanHolds(b.autoHolds).map(({ x, y, w, h }) => ({ x, y, w, h }));
+  if (has('detector')) out.detector = oneOf(['yolov8n-freeclimbs-2'] as const, b.detector, 'detector');
   // Projeto encerrado sem mandar (a via saiu / desistiu); a data vem do servidor.
   if (partial && has('dropped')) {
     if (typeof b.dropped !== 'boolean') bad('dropped');

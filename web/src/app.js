@@ -714,6 +714,7 @@ function viewNew() {
     if (d.seed) {
       d.seed.color = color;
       d.route = routeHolds(d.boxes, d.seed, d.canvas.width, d.canvas.height);
+      d.autoRoute = [...d.route]; // o que o app sugeriu sozinho, antes das correções (medir acerto / treino)
     }
   };
   /** Agarra no ponto: a detectada mais próxima; senão cresce a região pela cor (volume ou agarra
@@ -765,7 +766,8 @@ function viewNew() {
         ...(d.note.trim() ? { note: d.note.trim() } : {}),
         ...(d.tap ? { tap: d.tap } : {}),
         ...(d.route?.length ? { holds: d.route.slice(0, 80).map(holdOut) } : {}),
-        ...(d.boxes?.length ? { cands: d.boxes.slice(0, 300).map(boxOut) } : {}),
+        ...(d.boxes?.length ? { cands: d.boxes.slice(0, 300).map(boxOut), detector: DETECTOR_ID } : {}),
+        ...(d.autoRoute?.length ? { autoHolds: d.autoRoute.slice(0, 80).map(boxOut) } : {}),
         ...(d.projectId ? { projectId: d.projectId } : {}),
         ...(full ? { photoType: full.type } : {}),
       };
@@ -877,6 +879,8 @@ function cycleRole(holds, x, y) {
   if (!b.role) delete b.role;
   return true;
 }
+/** Modelo que achou as candidatas (muda quando o detector for trocado ou retreinado). */
+const DETECTOR_ID = 'yolov8n-freeclimbs-2';
 const holdOut = ({ x, y, w, h: hh, role }) => ({ x, y, w, h: hh, ...(role ? { role } : {}) });
 const boxOut = ({ x, y, w, h: hh }) => ({ x, y, w, h: hh });
 
@@ -1002,7 +1006,7 @@ function viewClimb(id) {
     ev.currentTarget.disabled = true;
     const r = rootOf(climbOf(id));
     const holds = holdEdit.holds.slice(0, 80).map(holdOut);
-    const cands = holdEdit.boxes?.length ? { cands: holdEdit.boxes.slice(0, 300).map(boxOut) } : {};
+    const cands = holdEdit.boxes?.length ? { cands: holdEdit.boxes.slice(0, 300).map(boxOut), detector: DETECTOR_ID } : {};
     try {
       upsert(state.climbs, await api(`/climbs/${r.id}`, { method: 'PATCH', body: { holds, ...cands } }));
       holdEdit = null;
