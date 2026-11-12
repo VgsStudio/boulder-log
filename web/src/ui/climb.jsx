@@ -1,5 +1,6 @@
 // Boulder em React: novo boulder (foto + detector), detalhe, projeto, compartilhar e link recebido.
 import { track } from '../analytics.js';
+import { climbCard, shareCard } from '../storycard.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, t } from '../i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest } from '../color.js';
@@ -632,8 +633,10 @@ export function ClimbView({ id }) {
           <WithNav hasPrev={ni > 0} hasNext={ni >= 0 && ni < navList.length - 1} go={goNav}>
             <ClimbStage url={photo?.url ?? r.thumbUrl} c={r} />
           </WithNav>
+          {S.isSend(c) && <StoryButton c={c} r={r} photoUrl={photo?.url ?? r.thumbUrl} gymName={gymName} />}
           <button className="link small" type="button" onClick={startHoldEdit}>{t('holds.edit')}</button>
         </>)}
+      {!r.photoType && S.isSend(c) && <StoryButton c={c} r={r} gymName={gymName} />}
 
       <section className="card stack">
         <Seg options={RESULTS.map((x) => [x, t(`result.${x}`)])} value={c.result} onPick={(x) => patchClimb({ result: x })} />
@@ -689,6 +692,20 @@ export function ClimbView({ id }) {
       </button>
     </div>
   );
+}
+
+/** "Compartilhar nos stories": cartão com a foto, o grau e o resultado (Instagram, WhatsApp…). */
+function StoryButton({ c, r, photoUrl, gymName }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const cv = await climbCard({ ...c, holds: r.holds }, { photoUrl, gymName });
+      await shareCard(cv, `chalkmark-${grade(c.grade)}`, 'climb');
+    } catch (err) { fail(err); }
+    setBusy(false);
+  };
+  return <button className="btn story-btn block" type="button" disabled={busy} onClick={go}>📸 {busy ? t('story.making') : t('story.share')}</button>;
 }
 
 // ---------- compartilhar ----------
