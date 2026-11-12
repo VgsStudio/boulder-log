@@ -218,7 +218,7 @@ export class BoulderStack extends Stack {
       ['/api/climbs/{id}/media', M.GET], ['/api/climbs/{id}/analyze', M.POST],
       ['/api/settings', M.GET], ['/api/settings', M.PUT],
       ['/api/climbs/{id}/share', M.POST], ['/api/shares/{id}', M.GET], ['/api/shares/{id}/accept', M.POST],
-      ['/api/account', M.DELETE],
+      ['/api/account', M.DELETE], ['/api/feedback', M.POST],
       ['/api/profile', M.GET], ['/api/profile', M.PUT], ['/api/users', M.GET], ['/api/users/{handle}', M.GET],
       ['/api/users/{handle}/follow', M.POST], ['/api/users/{handle}/follow', M.DELETE],
       ['/api/users/{handle}/climbs/{id}/copy', M.POST], ['/api/social', M.GET],

@@ -500,6 +500,21 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       log('share.accepted', { share: String(pid).slice(0, 4) });
       return json(201, climb);
     }
+    case 'POST /api/feedback': {
+      // Avaliação do app: uma por pessoa por dia (reenviar no mesmo dia substitui). Lida pelo dono do app.
+      const b = body();
+      const day = nowIso().slice(0, 10);
+      const item = {
+        pk: 'FEEDBACK', sk: `${day}#${sub}`,
+        stars: int(b.stars, 1, 5, 'stars'),
+        comment: b.comment === undefined ? '' : str(b.comment, 1000, 'comment'),
+        lang: b.lang === undefined ? undefined : oneOf(['pt', 'en'] as const, b.lang, 'lang'),
+        createdAt: nowIso(),
+      };
+      await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
+      log('feedback', { stars: item.stars, hasComment: !!item.comment });
+      return json(201, { ok: true });
+    }
     case 'DELETE /api/account': {
       // Confirmação explícita no corpo (o app pede para digitar a palavra).
       if (body().confirm !== 'DELETE') bad('confirm');

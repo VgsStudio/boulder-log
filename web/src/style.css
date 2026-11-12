@@ -555,3 +555,9 @@ html:has(dialog[open]) { overflow: hidden; }
 .friends-card { display: block; text-decoration: none; color: inherit; }
 .friends-card h2 { margin: 0; }
 .rank.mini .person-row { padding: 6px 0; }
+
+.stars { display: flex; justify-content: center; gap: 6px; }
+.stars button { width: 52px; height: 52px; padding: 4px; border: 0; background: none; cursor: pointer; color: var(--line); }
+.stars svg { width: 100%; height: 100%; fill: currentColor; stroke: none; transition: transform .12s; }
+.stars button.on { color: var(--yellow); }
+.stars button:active svg { transform: scale(.88); }

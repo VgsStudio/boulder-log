@@ -650,7 +650,7 @@ function viewNew() {
     try {
       const canvas = await toCanvas(file, 1568);
       d.preparing = false;
-      Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading' });
+      Object.assign(d, { canvas, tap: null, lab: null, suggestion: null, boxes: null, seed: null, route: null, detect: 'loading', zoom: { k: 1, x: 0, y: 0 } });
       d.rgba = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data;
       draw();
       // Detecta as agarras em segundo plano enquanto você preenche o resto.
@@ -792,7 +792,7 @@ function viewNew() {
           ? h('section', {},
             stage([d.canvas,
               holdsOverlay(d.route, d.boxes),
-              d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap),
+              d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap, d.zoom),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
@@ -928,7 +928,7 @@ function viewClimb(id) {
   let holdEdit = null; // { canvas, rgba, boxes, holds, status }
   const startHoldEdit = async () => {
     const r = rootOf(climbOf(id));
-    holdEdit = { holds: (r.holds ?? []).map((b) => ({ ...b })), status: 'loading' };
+    holdEdit = { holds: (r.holds ?? []).map((b) => ({ ...b })), status: 'loading', zoom: { k: 1, x: 0, y: 0 } };
     draw();
     try {
       const url = photo?.url ?? (await api(`/climbs/${r.id}/media`)).photoUrl;
@@ -1001,7 +1001,7 @@ function viewClimb(id) {
       r.photoType && (holdEdit
         ? h('section', { class: 'stack' },
           holdEdit.canvas
-            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold)
+            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom)
             : null,
           h('p', { class: `small detect-status ${holdEdit.status}` },
             holdEdit.status === 'loading' ? t('detect.loading') : holdEdit.status === 'failed' ? t('detect.failed') : t('holds.hint', { n: holdEdit.holds.length })),
@@ -1122,11 +1122,10 @@ function viewShare(token) {
 // ---------- foto com zoom ----------
 /** Quadro da foto com pinça para ampliar só a foto (não a página) e arrastar quando ampliada.
  *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom. */
-function stage(content, onTap) {
+function stage(content, onTap, z = { k: 1, x: 0, y: 0 }) {
   const inner = h('div', { class: 'zoom' }, content);
   const reset = h('button', { class: 'zoom-reset', type: 'button', hidden: true, onclick: (e) => { e.stopPropagation(); z.k = 1; z.x = z.y = 0; apply(); } }, t('zoom.reset'));
   const box = h('div', { class: 'stage' }, inner, reset);
-  const z = { k: 1, x: 0, y: 0 };
   const pts = new Map();
   let start = null; // gesto atual: posição, zoom e distância iniciais
   const apply = () => {
@@ -1180,6 +1179,8 @@ function stage(content, onTap) {
   };
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
+  // Redesenho com zoom já aplicado: reaplica assim que o quadro tiver tamanho.
+  if (z.k > 1.01) requestAnimationFrame(apply);
   return box;
 }
 
@@ -1692,11 +1693,59 @@ function settingsSheet() {
     h('button', { class: 'link', type: 'button', onclick: () => openSheet(h('div', { class: 'stack' }, h('h2', {}, t('terms.view')), termsBody(),
       state.settings.photoTermsAt && h('p', { class: 'muted small' }, t('terms.accepted', { d: fmtDate(state.settings.photoTermsAt, { day: 'numeric', month: 'long', year: 'numeric' }) })),
       h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
+    h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
     h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
     h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
   );
   draw();
   openSheet(box);
+}
+
+// ---------- avaliação ("está gostando?") ----------
+const FB_KEY = 'cm:fb';
+const DAY_MS = 86400_000;
+const fbNext = () => { try { return Number(localStorage.getItem(FB_KEY)) || 0; } catch { return 0; } };
+const fbLater = (days) => { try { localStorage.setItem(FB_KEY, String(Date.now() + days * DAY_MS)); } catch {} };
+/** Pergunta de tempos em tempos: só para quem já usou o app (2+ sessões), nunca por cima de outra janela.
+ *  Fechou sem avaliar: volta em 7 dias. Avaliou: só em 60. */
+function maybeAskFeedback() {
+  if (state.sessions.length < 2 || $('#sheet').open || activeSession()) return;
+  if (!fbNext()) { fbLater(3); return; } // primeira vez: dá uns dias de uso antes
+  if (Date.now() >= fbNext()) feedbackSheet(true);
+}
+function feedbackSheet(auto = false) {
+  let stars = 0;
+  const box = h('div', { class: 'stack' });
+  const close = () => { if (auto && !stars) fbLater(7); $('#sheet').close(); };
+  const draw = () => fill(box,
+    h('h2', {}, t('fb.title')),
+    h('p', { class: 'muted' }, t('fb.lead')),
+    h('div', { class: 'stars', role: 'radiogroup', 'aria-label': t('fb.title') }, [1, 2, 3, 4, 5].map((n) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(stars === n), 'aria-label': t('fb.star', { n }),
+      class: n <= stars ? 'on' : '', onclick: () => { stars = n; playTick(); draw(); box.querySelector('textarea')?.focus(); },
+    }, svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: 'M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9Z' }))))),
+    stars > 0 && [
+      h('label', { class: 'field' }, h('span', {}, stars >= 4 ? t('fb.good') : t('fb.bad')),
+        h('textarea', { maxlength: 1000, rows: 4, placeholder: t('fb.placeholder') })),
+      h('button', {
+        class: 'btn primary big block', type: 'button',
+        onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          try {
+            await api('/feedback', { method: 'POST', body: { stars, comment: box.querySelector('textarea').value.trim(), lang } });
+            fbLater(60);
+            $('#sheet').close();
+            playSent();
+            toast(t('fb.thanks'));
+          } catch (err) { fail(err); e.target.disabled = false; }
+        },
+      }, t('fb.send')),
+    ],
+    h('button', { class: 'btn ghost block', type: 'button', onclick: close }, auto ? t('fb.later') : t('settings.close')));
+  draw();
+  openSheet(box);
+  // Fechar tocando fora também conta como "agora não".
+  if (auto) $('#sheet').addEventListener('close', () => { if (!stars) fbLater(7); }, { once: true });
 }
 
 /** Excluir a conta: some tudo (boulders, fotos, perfil, quem segue, links) e o login. */
@@ -1786,6 +1835,7 @@ async function boot() {
   });
   render();
   checkAutoEnd();
+  setTimeout(maybeAskFeedback, 4000);
   setInterval(checkAutoEnd, 5 * 60_000);
 }
 
