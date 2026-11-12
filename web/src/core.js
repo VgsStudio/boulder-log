@@ -47,6 +47,12 @@ export let cfg;
 export const redirectUri = () => `${location.origin}/`;
 export const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, profile: null, loadedAt: 0 };
 export let timers = [];
+// Quem desenha com React escuta estas mudanças (emit depois de alterar `state`).
+const listeners = new Set();
+let version = 0;
+export const subscribe = (f) => { listeners.add(f); return () => listeners.delete(f); };
+export const getVersion = () => version;
+export const emit = () => { version++; listeners.forEach((f) => f()); };
 
 // ---------- DOM ----------
 /** Cria elemento. on* = evento; style = objeto de propriedades (CSP proíbe atributo style). */

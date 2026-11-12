@@ -1,4 +1,5 @@
 // Sessão: localização, encerramento automático e a tela da sessão.
+import { isReact, mount, sweep } from './ui/base.jsx';
 import { render } from './app.js';
 import { fmtDate, fmtDuration, t } from './i18n.js';
 import * as S from './stats.js';
@@ -173,8 +174,9 @@ export function endSessionSheet(s) {
 export function openSheet(content) {
   const d = $('#sheet');
   d.style.transform = '';
-  d.replaceChildren(content);
-  d.showModal();
+  d.replaceChildren(isReact(content) ? mount(content) : content);
+  sweep();
+  if (!d.open) d.showModal();
 }
 
 /** Janela de baixo: arrastar para baixo (com ela no topo da rolagem) fecha. Fora de fotos, campos e listas roláveis. */

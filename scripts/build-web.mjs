@@ -42,7 +42,8 @@ const out = await build({
   outdir: path.join(dist, 'static/assets'),
   metafile: true,
   legalComments: 'none',
-  define: { __ORT_BASE__: JSON.stringify(ortBase), __WORKER_URL__: JSON.stringify(`/assets/${workerFile}`) },
+  jsx: 'automatic',
+  define: { __ORT_BASE__: JSON.stringify(ortBase), __WORKER_URL__: JSON.stringify(`/assets/${workerFile}`), 'process.env.NODE_ENV': '"production"' },
   logOverride: { 'empty-import-meta': 'silent' },
 });
 const entry = Object.entries(out.metafile.outputs).filter(([, o]) => o.entryPoint).map(([f]) => path.basename(f));

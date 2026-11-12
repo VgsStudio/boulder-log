@@ -704,3 +704,6 @@ img.fade.in { opacity: 1; }
 /* Alça da janela de baixo: dá a dica de que arrastar para baixo fecha */
 .sheet { padding-top: 26px; }
 .sheet::before { content: ""; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
+
+/* Contêiner das telas em React: não ocupa espaço no layout */
+.rx { display: contents; }

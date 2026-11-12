@@ -1,13 +1,15 @@
 // Chalkmark: SPA sem framework. Rotas por hash e inicialização.
+import { createElement } from 'react';
+import { mount, sweep } from './ui/base.jsx';
+import { History, Progress } from './ui/history.jsx';
 import './style.css';
 import { t } from './i18n.js';
 import { bumpNags, clearGuest, getPhoto, guestLocked, guestNags, guestPending, startGuest } from './guest.js';
-import { PHOTO_TERMS_VERSION, $, view, cfg, state, timers, h, fill, svg, toast, fail, seg, saveTokens, cognitoApi, fromAuthResult, login, idToken, guestMode, api, loadAll, loadSnapshot, activeSession, upload, setCfg, setGuestMode, clearTimers } from './core.js';
+import { PHOTO_TERMS_VERSION, $, view, cfg, state, timers, h, fill, svg, toast, fail, seg, saveTokens, cognitoApi, fromAuthResult, login, idToken, guestMode, api, loadAll, loadSnapshot, activeSession, upload, setCfg, setGuestMode, clearTimers, emit } from './core.js';
 import { icon, streakSheet, streakPill } from './game.js';
 import { checkAutoEnd, viewSession, openSheet, sheetSwipe } from './session.js';
 import { onCameraPhoto, viewNew, viewClimb, debounce, viewShare, backfillPreviews } from './climb.js';
 import { profileSheet, viewFriends, viewMe, viewUser, feed, viewFeed } from './social.js';
-import { viewHistory, viewProgress } from './history.js';
 import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './settings.js';
 
 // ---------- roteamento ----------
@@ -15,9 +17,9 @@ const ROUTES = [
   [/^#?\/?$/, viewSession, 'session'],
   [/^#\/new$/, viewNew, 'session'],
   [/^#\/climb\/([a-z0-9]{19})$/, viewClimb, null],
-  [/^#\/history$/, viewHistory, 'history'],
+  [/^#\/history$/, () => mount(createElement(History)), 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
-  [/^#\/progress$/, viewProgress, 'profile'],
+  [/^#\/progress$/, () => mount(createElement(Progress)), 'profile'],
   [/^#\/feed$/, viewFeed, 'feed'],
   [/^#\/me$/, viewMe, 'profile'],
   [/^#\/friends$/, viewFriends, 'profile'],
@@ -39,6 +41,8 @@ export function render() {
   const [re, fn, tab] = ROUTES.find(([r]) => r.test(hash)) ?? ROUTES[0];
   wantScroll = history.state?.y ?? 0;
   view.replaceChildren(fn(...(hash.match(re)?.slice(1) ?? [])));
+  sweep();
+  emit();
   window.scrollTo(0, wantScroll);
   streakPill();
   document.querySelectorAll('#tabbar a').forEach((a) => (a.dataset.tab === tab ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
