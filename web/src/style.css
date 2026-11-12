@@ -617,3 +617,5 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 @keyframes scan { to { top: 100%; } }
 @media (prefers-reduced-motion: reduce) { .stage.detecting::after { animation: none; display: none; } }
 .pinned-head { width: 100%; border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; gap: 8px; } .pinned .stage { cursor: pointer; }
+.share-icon { margin: 0; color: var(--muted); }
+.icon-btn .line-ico { fill: none; stroke: currentColor; }

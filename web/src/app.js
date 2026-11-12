@@ -1067,6 +1067,7 @@ function viewClimb(id) {
           class: 'icon-btn pin-btn', type: 'button', onclick: () => pinClimb(r),
           'aria-pressed': String(state.profile?.pinned === r.id), 'aria-label': state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add'),
         }, lineIcon(PIN_ICON)),
+        h('button', { class: 'icon-btn share-icon', type: 'button', 'aria-label': t('share.button'), onclick: (e) => shareClimb(r, e.currentTarget) }, lineIcon(SHARE_ICON)),
         h('button', { class: 'link', type: 'button', onclick: () => { editing = !editing; draw(); } }, editing ? t('climb.done') : t('climb.edit'))),
       // Edição de cor e grau (num projeto, as tentativas seguintes usam a cor/grau da raiz).
       editing && h('section', { class: 'card stack' },
@@ -1130,7 +1131,6 @@ function viewClimb(id) {
           ]
           : h('button', { class: 'btn block', type: 'button', onclick: analyze }, t('ai.analyze'))),
 
-      h('button', { class: 'btn block', type: 'button', onclick: (e) => shareClimb(r, e.currentTarget) }, t('share.button')),
       h('button', { class: 'btn ghost danger block', type: 'button', onclick: del },
         cur.id === r.id && tryIds().length ? t('climb.deleteProject', { n: tryIds().length + 1 }) : t('climb.delete')),
     );
