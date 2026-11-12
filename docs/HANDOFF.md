@@ -167,6 +167,8 @@ Os ids (`newId`) são ordenáveis pelo tempo (base36 dos ms), e é isso que perm
 
 ## 4. Operação
 
+- **Tags (custos por projeto):** tudo que o CDK cria leva `project=chalkmark`, `creator=vsoller`, `owner=vsoller` (`infra/app.ts`; dá para trocar por `TAG_PROJECT`, `TAG_CREATOR`, `TAG_OWNER`). Os recursos criados à mão também foram marcados: segredo `chalkmark/google-oauth`, orçamento `boulder-log-monthly`, papel `github-actions-boulder-log-deploy` e a identidade do SES. As tags `project` e `owner` foram ativadas no faturamento (o Cost Explorer filtra por projeto); `creator` ativa quando a AWS terminar de ver a tag (até 24 h): `aws ce update-cost-allocation-tags-status --cost-allocation-tags-status TagKey=creator,Status=Active`.
+
 - **Deploy:** push na `main` → `.github/workflows/deploy.yml` (OIDC → papel `github-actions-boulder-log-deploy`) → `cdk deploy BoulderLog-App`. Leva ~1,5 min.
 - **Variáveis do repositório (GitHub → Settings → Variables):**
 
