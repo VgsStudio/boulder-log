@@ -227,16 +227,28 @@ export function Friends() {
   );
 }
 
-const Suggestions = ({ list, onFollow }) => (
-  <ul className="suggest">
-    {list.map((s) => (
-      <li key={s.handle} className="card">
-        <a href={`#/u/${s.handle}`}><Avatar p={s} size={56} /><strong>{s.name}</strong><span className="muted small">{reasonText(s)}</span></a>
-        <FollowButton p={s} onChange={onFollow} />
-      </li>
-    ))}
-  </ul>
-);
+/** Sugestões que a pessoa dispensou no X (não voltam a aparecer na Home). */
+const HIDE = 'cm:hideSug';
+const hidden = () => { try { return new Set(JSON.parse(localStorage.getItem(HIDE) || '[]')); } catch { return new Set(); } };
+const hide = (handle) => { try { localStorage.setItem(HIDE, JSON.stringify([...hidden(), handle].slice(-200))); } catch {} };
+
+/** Cartões de "talvez você conheça" lado a lado (rola para o lado). `dismiss` mostra o X. */
+function Suggestions({ list, onFollow, big = false, dismiss = false }) {
+  const [gone, setGone] = useState(() => (dismiss ? hidden() : new Set()));
+  const shown = list.filter((s) => !gone.has(s.handle));
+  if (!shown.length) return null;
+  return (
+    <ul className={`suggest ${big ? 'big' : ''}`}>
+      {shown.map((s) => (
+        <li key={s.handle} className="card">
+          {dismiss && <button className="sug-x" type="button" aria-label={t('suggest.hide')} onClick={() => { hide(s.handle); setGone(new Set([...gone, s.handle])); track('suggestion_hidden'); }}>×</button>}
+          <a href={`#/u/${s.handle}`}><Avatar p={s} size={big ? 88 : 56} /><strong>{s.name}</strong><span className="muted small">{reasonText(s)}</span></a>
+          <FollowButton p={s} onChange={onFollow} className="block" />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Aba Perfil: o seu perfil (com Amigos dentro), ou o convite para criar um. */
 export function Me() {
@@ -515,10 +527,18 @@ function FeedCard({ c }) {
 }
 
 /** Pessoas para seguir, intercaladas na Home. */
-function FollowCard({ onFollow }) {
-  const s = social.data?.suggestions ?? [];
-  if (!s.length) return null;
-  return <section className="card stack"><h2>{t('suggest.title')}</h2><Suggestions list={s.slice(0, 8)} onFollow={onFollow} /></section>;
+/** Retângulo "Talvez você conheça" entre os posts (como no Instagram). `n` gira a lista a cada vez que aparece. */
+function FollowCard({ n = 0 }) {
+  const all = (social.data?.suggestions ?? []).filter((s) => !hidden().has(s.handle));
+  if (!all.length) return null;
+  const k = (n * 4) % all.length;
+  const list = [...all.slice(k), ...all.slice(0, k)].slice(0, 8);
+  return (
+    <section className="card stack suggest-card">
+      <div className="row"><h2 className="grow">{t('suggest.title')}</h2><a className="link small" href="#/friends">{t('suggest.all')}</a></div>
+      <Suggestions list={list} big dismiss />
+    </section>
+  );
 }
 
 /** Fim da Home (ou Home vazia): achar amigos ou registrar um boulder. */
@@ -570,22 +590,22 @@ function FeedList() {
     io.observe(sentinel.current);
     return () => io.disconnect();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const onFollow = () => { social.data = null; feed.items = []; feed.next = undefined; };
   const empty = feed.next === null && !feed.items.length;
   return (
     <div className="stack">
       <h1>Chalkmark</h1>
       <div className="stack">
-        {feed.items.map((c, i) => [<FeedCard key={c.id} c={c} />, i === 4 && <FollowCard key="fc" onFollow={onFollow} />])}
+        {/* "Talvez você conheça" a cada 8 posts (depois do 4º, 12º, 20º…). */}
+        {feed.items.map((c, i) => [<FeedCard key={c.id} c={c} />, i % 8 === 3 && <FollowCard key={`fc${i}`} n={Math.floor(i / 8)} />])}
         {empty && <>
           <section className="card stack">
             <h2>{t('feed.emptyTitle')}</h2><p className="muted">{feed.friends ? t('feed.emptyFriends') : t('feed.emptyLead')}</p>
             <a className="btn primary block" href="#/friends">{t('feed.find')}</a>
           </section>
-          <FollowCard onFollow={onFollow} />
+          <FollowCard />
         </>}
         {feed.next === null && <LookingCard />}
-        {feed.items.length > 0 && feed.items.length < 5 && <FollowCard onFollow={onFollow} />}
+        {feed.items.length > 0 && feed.items.length < 5 && <FollowCard />}
         {feed.loading && <p className="small detect-status loading">{t('friends.loading')}</p>}
         {feed.next === null && feed.items.length > 0 && <p className="muted small center">{t('feed.end')}</p>}
       </div>

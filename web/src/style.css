@@ -714,3 +714,14 @@ img.fade.in { opacity: 1; }
 .swipe-act { position: absolute; top: 0; right: 0; bottom: 0; width: 96px; border: 0; background: var(--pink-deep); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
 .swipe-body { position: relative; background: var(--surface); touch-action: pan-y; }
 @media (prefers-reduced-motion: reduce) { .swipe-body { transition: none !important; } }
+
+/* "Talvez você conheça" na Home: cartões grandes, X para dispensar, botão largo */
+.suggest li { position: relative; }
+.suggest.big { grid-auto-columns: 172px; }
+.suggest.big a { min-height: 150px; }
+.suggest .btn.block { width: 100%; }
+.sug-x { position: absolute; top: 4px; right: 6px; border: 0; background: none; color: var(--muted); font-size: 1.3rem; line-height: 1; padding: 4px 6px; cursor: pointer; }
+.suggest { align-items: stretch; scrollbar-width: none; }
+.suggest::-webkit-scrollbar { display: none; }
+.suggest > li.card { margin: 0; }
+.suggest.big a { flex: 1; }
