@@ -14,6 +14,22 @@ const ortBase = `/assets/ort-${ortVersion}/`;
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(path.join(dist, 'pages'), { recursive: true });
 
+// Worker do detector de agarras: arquivo próprio (com o onnxruntime dentro), carregado na primeira foto.
+const wk = await build({
+  entryPoints: [path.join(root, 'web/src/detect-worker.js')],
+  bundle: true,
+  minify: true,
+  format: 'esm',
+  target: ['es2022', 'safari16'],
+  entryNames: '[name]-[hash]',
+  outdir: path.join(dist, 'static/assets'),
+  metafile: true,
+  legalComments: 'none',
+  define: { __ORT_BASE__: JSON.stringify(ortBase), __WORKER_URL__: '""' },
+  logOverride: { 'empty-import-meta': 'silent' },
+});
+const workerFile = Object.keys(wk.metafile.outputs).map((f) => path.basename(f)).find((f) => f.endsWith('.js'));
+
 const out = await build({
   entryPoints: [path.join(root, 'web/src/app.js')],
   bundle: true,
@@ -26,7 +42,7 @@ const out = await build({
   outdir: path.join(dist, 'static/assets'),
   metafile: true,
   legalComments: 'none',
-  define: { __ORT_BASE__: JSON.stringify(ortBase) },
+  define: { __ORT_BASE__: JSON.stringify(ortBase), __WORKER_URL__: JSON.stringify(`/assets/${workerFile}`) },
   logOverride: { 'empty-import-meta': 'silent' },
 });
 const entry = Object.entries(out.metafile.outputs).filter(([, o]) => o.entryPoint).map(([f]) => path.basename(f));
@@ -43,5 +59,5 @@ const wasm = readFileSync(path.join(root, 'node_modules/onnxruntime-web/dist/ort
 mkdirSync(path.join(dist, `gz${ortBase}`), { recursive: true });
 writeFileSync(path.join(dist, `gz${ortBase}ort-wasm-simd-threaded.wasm`), gzipSync(wasm, { level: 9 }));
 
-for (const [f, o] of Object.entries(out.metafile.outputs)) console.log(`${path.basename(f)}  ${(o.bytes / 1024).toFixed(1)} KB`);
+for (const [f, o] of [...Object.entries(out.metafile.outputs), ...Object.entries(wk.metafile.outputs)]) console.log(`${path.basename(f)}  ${(o.bytes / 1024).toFixed(1)} KB`);
 console.log(`ort-wasm (gzip)  ${(gzipSync(wasm, { level: 9 }).length / 1048576).toFixed(1)} MB  em ${ortBase}`);

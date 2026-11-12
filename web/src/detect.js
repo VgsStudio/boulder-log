@@ -1,49 +1,37 @@
-// Detector de agarras no próprio navegador: YOLOv8n (ONNX, ~7 MB) via onnxruntime-web.
-// Modelo: jwlarocque/yolov8n-freeclimbs-detect-2 (Hugging Face, AGPL-3.0). Carrega só
-// quando o usuário tira a primeira foto; depois fica no cache do navegador.
+// Detector de agarras no próprio navegador: YOLOv8n (ONNX, ~7 MB) via onnxruntime-web, rodando num
+// Web Worker (detect-worker.js) para não travar a tela. Modelo: jwlarocque/yolov8n-freeclimbs-detect-2
+// (Hugging Face, AGPL-3.0). Carrega só na primeira foto; depois fica no cache do navegador.
 // A cor de cada agarra vem do color.js (mesmo método do toque).
 import { boxLab, colorDistance, rgbToLab, sampleLab, suggest } from './color.js';
 
-const SIZE = 2560; // entrada fixa do modelo exportado
+export const SIZE = 2560; // entrada fixa do modelo exportado
 const CONF = 0.3; // abaixo disso aparecem pedaços de parede lisa como "agarra"
 const IOU = 0.5;
-const MODEL_URL = '/assets/models/holds-yolov8n-fp16.onnx';
-/* global __ORT_BASE__ */
-// Definido no build (scripts/build-web.mjs) com a versão do onnxruntime-web no caminho.
-const ORT_BASE = typeof __ORT_BASE__ !== 'undefined' ? __ORT_BASE__ : '/assets/ort/';
+/* global __WORKER_URL__ */
+// Definido no build (scripts/build-web.mjs): o worker é um arquivo próprio, com hash no nome.
+const WORKER_URL = typeof __WORKER_URL__ !== 'undefined' ? __WORKER_URL__ : '';
 
-let sessionPromise;
-
-/** Carrega (uma vez) o runtime e o modelo. */
-export function loadDetector() {
-  sessionPromise ??= (async () => {
-    const ort = await import('onnxruntime-web/wasm');
-    // Só o .wasm vem do nosso caminho; a "cola" JS já está embutida no bundle.
-    ort.env.wasm.wasmPaths = { wasm: `${ORT_BASE}ort-wasm-simd-threaded.wasm` };
-    // Multithread só com isolamento de origem (COOP/COEP); senão roda em 1 thread.
-    ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
-    const session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
-    return { ort, session };
-  })();
-  sessionPromise.catch(() => (sessionPromise = undefined)); // tenta de novo na próxima foto
-  return sessionPromise;
+let worker;
+let seq = 0;
+const pending = new Map();
+function getWorker() {
+  if (!worker) {
+    worker = new Worker(WORKER_URL, { type: 'module' });
+    worker.onmessage = ({ data }) => {
+      const p = pending.get(data.id);
+      pending.delete(data.id);
+      if (data.error) p?.reject(new Error(data.error)); else p?.resolve(data.boxes);
+    };
+    worker.onerror = (e) => {
+      for (const p of pending.values()) p.reject(e);
+      pending.clear();
+      worker = undefined; // recria na próxima foto
+    };
+  }
+  return worker;
 }
-
-// float32 → bits float16 (o modelo recebe float16).
-const f32 = new Float32Array(1);
-const u32 = new Uint32Array(f32.buffer);
-function toHalf(v) {
-  f32[0] = v;
-  const x = u32[0];
-  const s = (x >>> 16) & 0x8000, e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
-  if (e <= 0) return s;
-  if (e >= 31) return s | 0x7c00;
-  return s | (e << 10) | (m >>> 13);
-}
-function fromHalf(h) {
-  const s = h & 0x8000 ? -1 : 1, e = (h >>> 10) & 0x1f, m = h & 0x3ff;
-  return e === 0 ? s * 2 ** -14 * (m / 1024) : e === 31 ? s * Infinity : s * 2 ** (e - 15) * (1 + m / 1024);
-}
+/** Começa a baixar runtime e modelo antes da primeira foto (o worker carrega sob demanda). */
+export const loadDetector = () => getWorker();
 
 function iou(a, b) {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
@@ -78,9 +66,9 @@ export function colorize(boxes, rgba, W, H, palette) {
   return boxes;
 }
 
-/** Detecta as agarras da foto (canvas). Devolve [{x, y, w, h, conf, color}] normalizados 0-1. */
-export async function detectHolds(canvas, palette = {}) {
-  const { ort, session } = await loadDetector();
+/** Detecta as agarras da foto (canvas). Devolve [{x, y, w, h, conf, color, lab}] normalizados 0-1.
+ *  Aqui só desenha o letterbox (rápido); conversão e modelo rodam no worker. */
+export function detectHolds(canvas, palette = {}) {
   const W = canvas.width, H = canvas.height;
   const scale = SIZE / Math.max(W, H);
   const lb = document.createElement('canvas');
@@ -89,22 +77,13 @@ export async function detectHolds(canvas, palette = {}) {
   ctx.fillStyle = 'rgb(114,114,114)';
   ctx.fillRect(0, 0, SIZE, SIZE);
   ctx.drawImage(canvas, 0, 0, Math.round(W * scale), Math.round(H * scale));
-  const px = ctx.getImageData(0, 0, SIZE, SIZE).data;
-  const plane = SIZE * SIZE;
-  const bits = new Uint16Array(3 * plane);
-  for (let i = 0; i < plane; i++) {
-    bits[i] = toHalf(px[i * 4] / 255);
-    bits[plane + i] = toHalf(px[i * 4 + 1] / 255);
-    bits[2 * plane + i] = toHalf(px[i * 4 + 2] / 255);
-  }
-  // Navegadores com Float16Array nativo exigem esse tipo; os demais aceitam os bits em Uint16Array.
-  const data = typeof Float16Array !== 'undefined' ? new Float16Array(bits.buffer) : bits;
-  const out = (await session.run({ [session.inputNames[0]]: new ort.Tensor('float16', data, [1, 3, SIZE, SIZE]) }))[session.outputNames[0]];
-  const n = out.dims[2];
-  const raw = out.data;
-  const read = raw instanceof Uint16Array ? (c, i) => fromHalf(raw[c * n + i]) : (c, i) => Number(raw[c * n + i]);
-  const full = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
-  return colorize(decode(read, n, scale, W, H), full, W, H, palette);
+  const lbPx = ctx.getImageData(0, 0, SIZE, SIZE).data.buffer;
+  const full = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data.buffer;
+  const id = ++seq;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    getWorker().postMessage({ id, lb: lbPx, full, W, H, scale, palette }, [lbPx, full]);
+  });
 }
 
 /** Agarras da via: as da mesma cor encadeadas a partir da tocada. Uma agarra entra se
