@@ -1032,8 +1032,15 @@ function viewClimb(id) {
       .then((x) => { upsert(state.climbs, x); draw(); }, fail);
     const toggle = (list, v, max) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v].slice(-max));
 
+    const ni = navList.indexOf(id);
+    const goNav = (d) => { const nid = navList[ni + d]; if (nid) location.replace(`#/climb/${nid}`); };
     fill(box, 
-      h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
+      h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`),
+        ni >= 0 && navList.length > 1 && h('span', { class: 'grow' }),
+        ni >= 0 && navList.length > 1 && h('div', { class: 'row nav-top' },
+          h('button', { class: 'icon-btn', type: 'button', disabled: ni <= 0, 'aria-label': t('nav.prev'), onclick: () => goNav(-1) }, '‹'),
+          h('span', { class: 'small muted num' }, `${ni + 1}/${navList.length}`),
+          h('button', { class: 'icon-btn', type: 'button', disabled: ni >= navList.length - 1, 'aria-label': t('nav.next'), onclick: () => goNav(1) }, '›'))),
       h('div', { class: 'row title-row' },
         h('h1', { class: 'row grow' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
         h('button', {
@@ -1061,7 +1068,11 @@ function viewClimb(id) {
           h('div', { class: 'row' },
             h('button', { class: 'btn ghost grow', type: 'button', onclick: () => { holdEdit = null; draw(); } }, t('holds.cancel')),
             h('button', { class: 'btn primary grow', type: 'button', onclick: saveHolds }, t('holds.save'))))
-        : [climbStage(photo?.url ?? r.thumbUrl, r),
+        : [(() => {
+          const i = navList.indexOf(id);
+          const go = (d) => { const nid = navList[i + d]; if (nid) location.replace(`#/climb/${nid}`); };
+          return withNav(climbStage(photo?.url ?? r.thumbUrl, r), i > 0, i >= 0 && i < navList.length - 1, go);
+        })(),
           h('button', { class: 'link small', type: 'button', onclick: startHoldEdit }, t('holds.edit'))]),
 
       h('section', { class: 'card stack' },
@@ -1264,6 +1275,31 @@ function photoImg(full, thumb) {
     pre.src = full;
   }
   return img;
+}
+
+// ---------- navegar entre boulders (‹ › e arrastar, como no Instagram) ----------
+/** Ids na ordem da lista de onde o boulder foi aberto (perfil, galeria, histórico). */
+let navList = [];
+const setNav = (ids) => { navList = ids; };
+/** Setas nas laterais da foto e arrasto horizontal; `go(+1|-1)` troca de boulder. */
+function withNav(el, hasPrev, hasNext, go) {
+  if (!el || (!hasPrev && !hasNext)) return el;
+  const wrap = h('div', { class: 'nav-wrap' }, el,
+    hasPrev && h('button', { class: 'nav-arrow prev', type: 'button', 'aria-label': t('nav.prev'), onclick: (e) => { e.stopPropagation(); go(-1); } }, '‹'),
+    hasNext && h('button', { class: 'nav-arrow next', type: 'button', 'aria-label': t('nav.next'), onclick: (e) => { e.stopPropagation(); go(1); } }, '›'));
+  // Arrasto: só quando a foto não está ampliada (aí o arrasto move a foto).
+  let x0 = null, y0 = 0;
+  wrap.addEventListener('touchstart', (e) => {
+    x0 = e.touches.length === 1 && !el.classList.contains('zoomed') && !el.querySelector('.zoomed') ? e.touches[0].clientX : null;
+    y0 = e.touches[0].clientY;
+  }, { passive: true });
+  wrap.addEventListener('touchend', (e) => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0 && hasNext) go(1); else if (dx > 0 && hasPrev) go(-1); }
+  });
+  return wrap;
 }
 
 /** Foto de um boulder com as agarras da via marcadas. */
@@ -1510,7 +1546,7 @@ function viewUser(handle, isTab = false) {
         (() => {
           const list = u.climbs.filter((c) => profileFilter === 'all' || (profileFilter === 'sent' ? ['sent', 'flash'].includes(c.status) : c.status === profileFilter));
           return list.length
-            ? h('div', { class: 'gallery' }, list.map((c) => h('button', { type: 'button', onclick: () => (u.me ? (location.hash = `#/climb/${c.id}`) : friendClimbSheet(u, c)) },
+            ? h('div', { class: 'gallery' }, list.map((c) => h('button', { type: 'button', onclick: () => { setNav(list.map((x) => x.id)); if (u.me) location.hash = `#/climb/${c.id}`; else friendClimbSheet(u, c, list); } },
               h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
               c.status && h('span', { class: `status-tag s-${c.status}` }, t(`status.${c.status}`)),
               h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
@@ -1557,11 +1593,13 @@ function tryButton(u, c) {
   }, t('friends.try'));
 }
 
-function friendClimbSheet(u, c) {
+function friendClimbSheet(u, c, list = [c]) {
+  const i = list.indexOf(c);
+  const go = (d) => list[i + d] && friendClimbSheet(u, list[i + d], list);
   openSheet(h('div', { class: 'stack' },
     h('h2', { class: 'row' }, swatch(c.color), colorName(c.color), h('span', { class: 'grade-pill' }, grade(c.grade)),
       h('span', { class: 'grow' }), h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))),
-    climbStage(c.photoUrl, c),
+    withNav(climbStage(c.photoUrl, c), i > 0, i < list.length - 1, go),
     h('p', { class: 'muted small' }, fmtDate(c.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })),
     !u.me && tryButton(u, c),
     h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
@@ -1621,7 +1659,8 @@ function viewHistory() {
         ? (summaries.length
           ? h('ul', { class: 'list card' }, summaries.map((s) => h('li', {}, h('details', { class: 'session', open: summaries.length === 1 },
             h('summary', {}, h('div', { class: 'grow' }, sessionHeader(s))),
-            h('ul', { class: 'list' }, state.climbs.filter((c) => c.sessionId === s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(climbRow))))))
+            h('ul', { class: 'list', onclick: () => setNav(summaries.flatMap((x) => state.climbs.filter((c) => c.sessionId === x.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((c) => c.id))) },
+              state.climbs.filter((c) => c.sessionId === s.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(climbRow))))))
           : h('p', { class: 'muted' }, t('history.empty')))
         : h('section', {},
           h('div', { class: 'row' },
@@ -1631,7 +1670,7 @@ function viewHistory() {
             h('select', { class: 'grow', 'aria-label': t('climb.result'), onchange: (e) => { historyUi.result = e.target.value; draw(); } },
               h('option', { value: '' }, `${t('climb.result')}: ${t('history.all')}`),
               RESULTS.map((r) => h('option', { value: r, selected: historyUi.result === r }, t(`result.${r}`))))),
-          h('div', { class: 'gallery' }, gallery.map((c) => h('a', { href: `#/climb/${c.id}` },
+          h('div', { class: 'gallery' }, gallery.map((c) => h('a', { href: `#/climb/${c.id}`, onclick: () => setNav(gallery.map((x) => x.id)) },
             h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200, onerror: (e) => e.target.remove() }),
             h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))),
     );

@@ -591,3 +591,14 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .svg-defs { position: absolute; }
 .legal-links { text-align: center; color: var(--muted); } .legal-links a { color: var(--muted); }
 .style-early { background: var(--orange-soft); color: var(--text); padding: 8px 12px; border-radius: 12px; }
+
+/* Setas para o boulder anterior/próximo, nas laterais da foto */
+.nav-wrap { position: relative; }
+.nav-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgb(15 18 38 / .6); color: #fff; font-size: 1.6rem; line-height: 1; font-weight: 900;
+  display: grid; place-items: center; padding-bottom: 4px;
+}
+.nav-arrow.prev { left: 8px; } .nav-arrow.next { right: 8px; }
+.nav-top { gap: 2px; } .nav-top .icon-btn { margin: 0; font-size: 1.6rem; font-weight: 900; color: var(--blue); } .nav-top .icon-btn:disabled { color: var(--line); }
