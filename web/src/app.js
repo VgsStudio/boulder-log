@@ -12,7 +12,7 @@ import { Session } from './ui/session.jsx';
 import { checkAutoEnd, openSheet, sheetSwipe } from './session.js';
 import { onCameraPhoto, viewNew, viewClimb, debounce, viewShare, backfillPreviews } from './climb.js';
 import { profileSheet, Friends, Me, User, feed, Feed } from './ui/social.jsx';
-import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './settings.js';
+import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './ui/settings.jsx';
 
 // ---------- roteamento ----------
 const ROUTES = [

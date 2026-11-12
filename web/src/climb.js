@@ -11,7 +11,7 @@ import { celebrate } from './ui/game.jsx';
 import { openSheet } from './session.js';
 import { avatar, followButton } from './social.js';
 import { pinClimb } from './ui/social.jsx';
-import { runTour, standalone, isIOS } from './settings.js';
+import { runTour, standalone, isIOS } from './ui/settings.jsx';
 
 // ---------- termo de uso das fotos ----------
 export function termsBody() {

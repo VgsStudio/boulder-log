@@ -4,7 +4,7 @@ import { COLORS } from '../color.js';
 import * as S from '../stats.js';
 import { RESULTS, state, gymOf, colorName, grade, sessionsText } from '../core.js';
 import { capitalize, setNav } from '../climb.js';
-import { settingsSheet } from '../settings.js';
+import { settingsSheet } from './settings.jsx';
 import { useStore, useRedraw, Seg, Swatch, Bar, ClimbRow, FadeImg, lqipBg } from './base.jsx';
 import { Hero, GradePathCard, AchievementsCard } from './game.jsx';
 
