@@ -1,11 +1,13 @@
 // API do Boulder Log. Toda rota passa pelo autorizador JWT do Cognito; o dono
 // dos dados é sempre o `sub` do token (pk = USER#sub), nunca algo do corpo.
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchGetCommand, DeleteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { CopyObjectCommand, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { randomBytes } from 'node:crypto';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { analyzePhoto, COLORS, sanitizeAi } from './ai.ts';
+// Mesmas contas de XP/nível/sequência do app (uma fonte só).
+import { distanceKm, isSend, level, streakWeeks, totalXp } from '../web/src/stats.js';
 import {
   AI_DAILY_LIMIT, ALLOWED_ORIGIN, ddb, HttpError, ID_RE, json, log, newId, nowIso, parseBody, PHOTO_BUCKET, s3, TABLE,
   type HttpEvent, type HttpResult,
@@ -22,6 +24,9 @@ const SHARE_DAYS = 90;
 /** Versão do termo de uso das fotos (web/src/i18n.js, chaves terms.*). Mudou o texto → nova versão → novo aceite. */
 export const PHOTO_TERMS_VERSION = '2026-11-11';
 const URL_SECONDS = 3600;
+// @usuário: minúsculas, números, ponto e sublinhado.
+const HANDLE_RE = /^[a-z0-9_.]{3,20}$/;
+const MAX_AVATAR = 300 * 1024;
 
 // ---------- validação (fronteira de confiança: só passa o que está na lista) ----------
 const bad = (field: string): never => { throw new HttpError(400, `INVALID_${field.toUpperCase()}`); };
@@ -163,6 +168,85 @@ async function getShare(token: string | undefined) {
   const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: `SHARE#${token}`, sk: 'SHARE' } }));
   if (!Item || (Item.ttl as number) * 1000 < Date.now()) throw new HttpError(404, 'NOT_FOUND');
   return Item;
+}
+
+/** Cria um projeto "ainda não tentado" na conta de `sub` a partir do boulder de outra pessoa,
+ *  copiando a foto (usado pelo link compartilhado e pelo perfil de um amigo). */
+async function copyClimb(sub: string, ownerSub: string, srcId: string, src: Record<string, unknown>, extra: Record<string, unknown>) {
+  const climbId = newId();
+  const item = {
+    pk: pkOf(sub), sk: `CLIMB#${climbId}`,
+    color: src.color, grade: src.grade, holds: src.holds, tap: src.tap, ai: src.ai, photoType: src.photoType,
+    result: 'project', attempts: 0, sharedBy: ownerSub, ...extra, createdAt: nowIso(),
+  };
+  if (src.photoType) {
+    for (const size of ['full', 'thumb'] as const) {
+      await s3.send(new CopyObjectCommand({
+        Bucket: PHOTO_BUCKET,
+        CopySource: `${PHOTO_BUCKET}/${photoKey(ownerSub, srcId, size)}`,
+        Key: photoKey(sub, climbId, size),
+        TaggingDirective: 'REPLACE', // não exige permissão de ler as tags da origem
+      })).catch((e) => { if (size === 'full') throw e; }); // sem miniatura: segue com a foto grande
+    }
+  }
+  await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
+  return withThumb(sub, item);
+}
+
+// ---------- social: perfil, seguir, ranking ----------
+const avatarKey = (sub: string) => `photos/${sub}/avatar`;
+const subOfPk = (pk: unknown) => String(pk).slice(5);
+/** Texto de busca: minúsculas e sem acento. */
+const fold = (x: string) => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+async function profileOf(sub: string) {
+  const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(sub), sk: 'PROFILE' } }));
+  return Item;
+}
+async function subOfHandle(handle: string | undefined) {
+  if (!handle || !HANDLE_RE.test(handle)) throw new HttpError(404, 'NOT_FOUND');
+  const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: `HANDLE#${handle}`, sk: 'HANDLE' } }));
+  if (!Item) throw new HttpError(404, 'NOT_FOUND');
+  return Item.sub as string;
+}
+/** Cartão público: o que qualquer pessoa logada vê. */
+async function card(p: Record<string, unknown>) {
+  const sub = subOfPk(p.pk);
+  return { handle: p.handle, name: p.name, avatarUrl: p.avatarType ? await signGet(avatarKey(sub)) : null };
+}
+/** Perfis de vários usuários (só quem já criou perfil). */
+async function profilesOf(subs: string[]) {
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i < subs.length; i += 100) {
+    const { Responses } = await ddb.send(new BatchGetCommand({
+      RequestItems: { [TABLE]: { Keys: subs.slice(i, i + 100).map((x) => ({ pk: pkOf(x), sk: 'PROFILE' })) } },
+    }));
+    out.push(...(Responses?.[TABLE] ?? []));
+  }
+  return out;
+}
+const followsOf = async (sub: string, kind: 'FOLLOWS#' | 'FOLLOWER#') =>
+  (await queryAll(pkOf(sub), kind)).map((x) => String(x.sk).slice(kind.length));
+async function isFollowing(a: string, b: string) {
+  const { Item } = await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(a), sk: `FOLLOWS#${b}` } }));
+  return !!Item;
+}
+/** Boulders a partir de uma data: o id é ordenável pelo tempo (base36 dos ms), então dá para
+ *  consultar só o intervalo. */
+async function climbsSince(sub: string, since: number) {
+  const items: Record<string, unknown>[] = [];
+  let ExclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await ddb.send(new QueryCommand({
+      TableName: TABLE,
+      KeyConditionExpression: 'pk = :pk AND sk BETWEEN :a AND :b',
+      ExpressionAttributeValues: { ':pk': pkOf(sub), ':a': `CLIMB#${since.toString(36).padStart(9, '0')}`, ':b': 'CLIMB#~' },
+      ExclusiveStartKey,
+    }));
+    items.push(...(out.Items ?? []));
+    ExclusiveStartKey = out.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return items;
 }
 
 // ---------- cota diária de IA (contador atômico) ----------
@@ -310,30 +394,178 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const sh = await getShare(pid);
       const photoUrl = sh.photoType ? await signGet(photoKey(sh.ownerSub as string, sh.climbId as string, 'full')) : null;
       const { color, grade, holds, tap, ai, createdAt } = sh;
-      return json(200, { color, grade, holds, tap, ai, createdAt, photoUrl, mine: sh.ownerSub === sub });
+      const owner = await profileOf(sh.ownerSub as string);
+      return json(200, { color, grade, holds, tap, ai, createdAt, photoUrl, mine: sh.ownerSub === sub, owner: owner ? await card(owner) : null });
     }
     case 'POST /api/shares/{id}/accept': {
       const sh = await getShare(pid);
-      const climbId = newId();
       // Entra como projeto ainda não tentado (sem sessão); a foto é copiada para a conta de quem aceitou.
-      const item = {
-        pk, sk: `CLIMB#${climbId}`,
-        color: sh.color, grade: sh.grade, holds: sh.holds, tap: sh.tap, ai: sh.ai, photoType: sh.photoType,
-        result: 'project', attempts: 0, sharedFrom: pid, createdAt: nowIso(),
-      };
-      if (sh.photoType) {
-        for (const size of ['full', 'thumb'] as const) {
-          await s3.send(new CopyObjectCommand({
-            Bucket: PHOTO_BUCKET,
-            CopySource: `${PHOTO_BUCKET}/${photoKey(sh.ownerSub as string, sh.climbId as string, size)}`,
-            Key: photoKey(sub, climbId, size),
-            TaggingDirective: 'REPLACE', // não exige permissão de ler as tags da origem
-          })).catch((e) => { if (size === 'full') throw e; }); // sem miniatura: segue com a foto grande
-        }
-      }
-      await ddb.send(new PutCommand({ TableName: TABLE, Item: item }));
+      const climb = await copyClimb(sub, sh.ownerSub as string, sh.climbId as string, sh, { sharedFrom: pid });
       log('share.accepted', { share: String(pid).slice(0, 4) });
-      return json(201, await withThumb(sub, item));
+      return json(201, climb);
+    }
+    // ---------- perfil ----------
+    case 'GET /api/profile': {
+      const p = await profileOf(sub);
+      return json(200, p ? { ...(await card(p)), pinned: p.pinned ?? null } : {});
+    }
+    case 'PUT /api/profile': {
+      const b = body();
+      const old = await profileOf(sub);
+      const f: Record<string, unknown> = {};
+      if (b.name !== undefined) f.name = str(b.name, 40, 'name') || bad('name');
+      if (b.handle !== undefined) {
+        f.handle = typeof b.handle === 'string' && HANDLE_RE.test(b.handle.trim().toLowerCase()) ? b.handle.trim().toLowerCase() : bad('handle');
+      }
+      if (!old && (!f.name || !f.handle)) bad('profile');
+      if (b.pinned !== undefined) {
+        f.pinned = b.pinned === null ? null : id(b.pinned, 'pinned');
+        if (f.pinned) await getItem(pk, `CLIMB#${f.pinned}`);
+      }
+      const avatarType = b.avatarType === undefined ? undefined : oneOf(PHOTO_TYPES, b.avatarType, 'avatarType');
+      if (avatarType) f.avatarType = avatarType;
+      const p: Record<string, unknown> = { ...old, ...f, pk, sk: 'PROFILE', createdAt: old?.createdAt ?? nowIso() };
+      p.search = fold(`${p.name} ${p.handle}`);
+      // @ novo: reserva com condição (único) e libera o antigo, tudo junto.
+      const tx: Record<string, unknown>[] = [{ Put: { TableName: TABLE, Item: p } }];
+      if (p.handle !== old?.handle) {
+        tx.push({ Put: { TableName: TABLE, Item: { pk: `HANDLE#${p.handle}`, sk: 'HANDLE', sub }, ConditionExpression: 'attribute_not_exists(pk)' } });
+        if (old?.handle) tx.push({ Delete: { TableName: TABLE, Key: { pk: `HANDLE#${old.handle}`, sk: 'HANDLE' } } });
+      }
+      try {
+        await ddb.send(new TransactWriteCommand({ TransactItems: tx as never }));
+      } catch (e) {
+        if ((e as Error).name === 'TransactionCanceledException') throw new HttpError(409, 'HANDLE_TAKEN');
+        throw e;
+      }
+      return json(200, {
+        ...(await card(p)), pinned: p.pinned ?? null,
+        upload: avatarType ? await signPost(avatarKey(sub), avatarType, MAX_AVATAR) : undefined,
+      });
+    }
+
+    // ---------- pessoas ----------
+    case 'GET /api/users': {
+      // ponytail: Scan nos perfis; com milhares de usuários, índice (GSI) por @.
+      const q = fold(str(event.queryStringParameters?.q ?? '', 40, 'q')).replace(/^@/, '');
+      if (q.length < 2) return json(200, []);
+      const found: Record<string, unknown>[] = [];
+      let ExclusiveStartKey: Record<string, unknown> | undefined;
+      do {
+        const out = await ddb.send(new ScanCommand({
+          TableName: TABLE, FilterExpression: 'sk = :p AND contains(#s, :q)',
+          ExpressionAttributeNames: { '#s': 'search' }, ExpressionAttributeValues: { ':p': 'PROFILE', ':q': q }, ExclusiveStartKey,
+        }));
+        found.push(...(out.Items ?? []));
+        ExclusiveStartKey = out.LastEvaluatedKey;
+      } while (ExclusiveStartKey && found.length < 20);
+      const following = new Set(await followsOf(sub, 'FOLLOWS#'));
+      return json(200, await Promise.all(found.filter((p) => subOfPk(p.pk) !== sub).slice(0, 20)
+        .map(async (p) => ({ ...(await card(p)), following: following.has(subOfPk(p.pk)) }))));
+    }
+    case 'GET /api/users/{handle}': {
+      const them = await subOfHandle(event.pathParameters?.handle);
+      const p = await profileOf(them);
+      if (!p) throw new HttpError(404, 'NOT_FOUND');
+      const me = them === sub;
+      const [following, followsMe, followers, follows, climbs, sessions] = await Promise.all([
+        me ? false : isFollowing(sub, them), me ? false : isFollowing(them, sub),
+        followsOf(them, 'FOLLOWER#'), followsOf(them, 'FOLLOWS#'),
+        queryAll(pkOf(them), 'CLIMB#'), queryAll(pkOf(them), 'SESSION#'),
+      ]);
+      const friends = me || (following && followsMe);
+      const photo = async (c: Record<string, unknown>) => {
+        const cid = String(c.sk).split('#')[1];
+        return {
+          id: cid, color: c.color, grade: c.grade, result: c.result, createdAt: c.createdAt, holds: c.holds, tap: c.tap,
+          thumbUrl: c.photoType ? await signGet(photoKey(them, cid, 'thumb')) : null,
+          photoUrl: c.photoType ? await signGet(photoKey(them, cid, 'full')) : null,
+        };
+      };
+      const pinned = p.pinned ? climbs.find((c) => c.sk === `CLIMB#${p.pinned}`) : undefined;
+      const sends = climbs.filter(isSend);
+      // Tentativas no boulder fixado (raiz + continuações): a "luta" que ele conta.
+      const pinnedTries = pinned ? climbs.filter((c) => c.sk === pinned.sk || c.projectId === p.pinned).length : 0;
+      const pinnedSent = pinned ? climbs.some((c) => (c.sk === pinned.sk || c.projectId === p.pinned) && isSend(c)) : false;
+      return json(200, {
+        ...(await card(p)), me, following, followsMe, friends,
+        followers: followers.length, follows: follows.length,
+        level: level(totalXp(climbs)).level,
+        pinned: pinned ? { ...(await photo(pinned)), tries: pinnedTries, sent: pinnedSent } : null,
+        // Histórico só para amigos (os dois se seguem).
+        stats: friends ? {
+          sessions: sessions.length, sends: sends.length,
+          maxGrade: sends.length ? Math.max(...sends.map((c) => c.grade as number)) : null,
+          streak: streakWeeks(sessions),
+        } : null,
+        climbs: friends
+          ? await Promise.all(climbs.filter((c) => c.photoType && !c.projectId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 60).map(photo))
+          : null,
+      });
+    }
+    case 'POST /api/users/{handle}/follow':
+    case 'DELETE /api/users/{handle}/follow': {
+      const them = await subOfHandle(event.pathParameters?.handle);
+      if (them === sub) bad('handle');
+      if (!(await profileOf(sub))) throw new HttpError(409, 'NO_PROFILE');
+      const keys = [{ pk, sk: `FOLLOWS#${them}` }, { pk: pkOf(them), sk: `FOLLOWER#${sub}` }];
+      const on = event.routeKey.startsWith('POST');
+      const at = nowIso();
+      await ddb.send(new TransactWriteCommand({
+        TransactItems: on
+          ? keys.map((k) => ({ Put: { TableName: TABLE, Item: { ...k, at } } }))
+          : keys.map((k) => ({ Delete: { TableName: TABLE, Key: k } })),
+      }));
+      return json(200, { following: on, followsMe: await isFollowing(them, sub) });
+    }
+    case 'POST /api/users/{handle}/climbs/{id}/copy': {
+      // "Quero tentar": copia um boulder de um amigo para os próprios projetos.
+      const them = await subOfHandle(event.pathParameters?.handle);
+      if (them === sub || !(await isFollowing(sub, them)) || !(await isFollowing(them, sub))) throw new HttpError(403, 'NOT_FRIENDS');
+      const cid = id(pid, 'id');
+      const src = await getItem(pkOf(them), `CLIMB#${cid}`);
+      return json(201, await copyClimb(sub, them, cid, src, {}));
+    }
+    case 'GET /api/social': {
+      // Ranking da semana (você + quem você segue) e "talvez você conheça".
+      const since = Date.parse(str(event.queryStringParameters?.since ?? '', 40, 'since'));
+      if (!Number.isFinite(since) || Math.abs(Date.now() - since) > 8 * 86400_000) bad('since');
+      const [following, followers, myClimbs, myGyms] = await Promise.all([
+        followsOf(sub, 'FOLLOWS#'), followsOf(sub, 'FOLLOWER#'), queryAll(pk, 'CLIMB#'), queryAll(pk, 'GYM#'),
+      ]);
+      const ranked = await Promise.all([sub, ...following].map(async (u) => ({ u, xp: totalXp(await climbsSince(u, since)) })));
+      const people = new Map((await profilesOf([sub, ...following])).map((p) => [subOfPk(p.pk), p]));
+      const ranking = await Promise.all(ranked.filter((r) => people.has(r.u)).sort((a, b) => b.xp - a.xp)
+        .map(async (r) => ({ ...(await card(people.get(r.u)!)), weekXp: r.xp, me: r.u === sub })));
+
+      // Talvez você conheça: segue você, te mandou boulder, seguido por quem você segue, mesmo ginásio.
+      const skip = new Set([sub, ...following]);
+      const why = new Map<string, string>();
+      const add = (u: string, reason: string) => { if (!skip.has(u) && !why.has(u)) why.set(u, reason); };
+      followers.forEach((u) => add(u, 'followsYou'));
+      myClimbs.forEach((c) => { if (c.sharedBy) add(c.sharedBy as string, 'sharedWithYou'); });
+      for (const f of following.slice(0, 20)) (await followsOf(f, 'FOLLOWS#')).forEach((u) => add(u, `via:${f}`));
+      const locs = myGyms.filter((g) => g.loc).map((g) => g.loc as { lat: number; lon: number });
+      if (locs.length && why.size < 12) {
+        // ponytail: Scan nos ginásios de todo mundo; com muitos usuários, geohash num índice.
+        let ExclusiveStartKey: Record<string, unknown> | undefined;
+        do {
+          const out = await ddb.send(new ScanCommand({
+            TableName: TABLE, FilterExpression: 'begins_with(sk, :g) AND attribute_exists(loc)',
+            ExpressionAttributeValues: { ':g': 'GYM#' }, ProjectionExpression: 'pk, loc, #n', ExpressionAttributeNames: { '#n': 'name' }, ExclusiveStartKey,
+          }));
+          for (const g of out.Items ?? []) if (locs.some((l) => distanceKm(l, g.loc) <= 0.5)) add(subOfPk(g.pk), `gym:${g.name}`);
+          ExclusiveStartKey = out.LastEvaluatedKey;
+        } while (ExclusiveStartKey);
+      }
+      const cand = [...why.keys()].slice(0, 30);
+      const profs = new Map((await profilesOf(cand)).map((p) => [subOfPk(p.pk), p]));
+      const viaHandles = new Map((await profilesOf(following.slice(0, 20))).map((p) => [subOfPk(p.pk), p.handle]));
+      const suggestions = await Promise.all(cand.filter((u) => profs.has(u)).slice(0, 12).map(async (u) => {
+        const [kind, arg] = why.get(u)!.split(/:(.*)/);
+        return { ...(await card(profs.get(u)!)), reason: kind, arg: kind === 'via' ? viaHandles.get(arg) ?? null : arg ?? null };
+      }));
+      return json(200, { ranking, suggestions, following: following.length, followers: followers.length });
     }
     case 'GET /api/climbs/{id}/media': {
       const cid = id(pid, 'id');

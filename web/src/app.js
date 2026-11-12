@@ -17,7 +17,7 @@ const RESULTS = ['flash', 'sent', 'project'];
 const $ = (s) => document.querySelector(s);
 const view = $('#view');
 let cfg;
-const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, loadedAt: 0 };
+const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, profile: null, loadedAt: 0 };
 let timers = [];
 
 // ---------- DOM ----------
@@ -147,8 +147,8 @@ async function api(path, { method = 'GET', body } = {}) {
 
 // ---------- dados ----------
 async function loadAll() {
-  const [gyms, sessions, climbs, settings] = await Promise.all([api('/gyms'), api('/sessions'), api('/climbs'), api('/settings')]);
-  Object.assign(state, { gyms, sessions, climbs, loadedAt: Date.now() });
+  const [gyms, sessions, climbs, settings, profile] = await Promise.all([api('/gyms'), api('/sessions'), api('/climbs'), api('/settings'), api('/profile')]);
+  Object.assign(state, { gyms, sessions, climbs, profile: profile.handle ? profile : null, loadedAt: Date.now() });
   state.settings = { ...state.settings, ...settings };
 }
 const activeSession = () => state.sessions.find((s) => !s.endedAt);
@@ -634,9 +634,7 @@ function viewNew() {
     if (grown) d.boxes.push(grown);
     return grown ?? undefined;
   };
-  const onTap = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const onTap = (x, y) => {
     const hit = d.route && d.boxes && findHold(x, y);
     if (hit && hit !== d.seed) {
       // Ajuste manual: toque numa agarra inclui ou tira ela da via.
@@ -726,9 +724,9 @@ function viewNew() {
         ? (project.thumbUrl && h('img', { class: 'thumb', src: project.thumbUrl, alt: '', style: { width: '96px', height: '96px' } }))
         : d.canvas
           ? h('section', {},
-            h('div', { class: 'stage', onclick: onTap }, d.canvas,
+            stage([d.canvas,
               holdsOverlay(d.route, d.boxes),
-              d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })),
+              d.tap && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
@@ -874,12 +872,7 @@ function viewClimb(id) {
           h('div', { class: 'chips scroll', role: 'group' }, S.GRADES.map((g) =>
             h('button', { class: 'chip grade', type: 'button', 'aria-pressed': String(cur.grade === g), onclick: () => patchClimb({ grade: g }) }, grade(g)))))),
 
-      r.photoType && h('div', { class: 'stage' },
-        photo?.url
-          ? h('img', { src: photo.url, alt: '', decoding: 'async' })
-          : r.thumbUrl && h('img', { src: r.thumbUrl, alt: '' }),
-        holdsOverlay(r.holds),
-        r.tap && h('span', { class: 'marker', style: { '--x': `${r.tap.x * 100}%`, '--y': `${r.tap.y * 100}%` } })),
+      r.photoType && climbStage(photo?.url ?? r.thumbUrl, r),
 
       h('section', { class: 'card stack' },
         seg(RESULTS.map((x) => [x, t(`result.${x}`)]), cur.result, (x) => patchClimb({ result: x })),
@@ -917,6 +910,8 @@ function viewClimb(id) {
           : h('button', { class: 'btn block', type: 'button', onclick: analyze }, t('ai.analyze'))),
 
       h('button', { class: 'btn block', type: 'button', onclick: (e) => shareClimb(r, e.currentTarget) }, t('share.button')),
+      h('button', { class: 'btn block', type: 'button', onclick: () => pinClimb(r) },
+        state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add')),
       h('button', { class: 'btn ghost danger block', type: 'button', onclick: del }, t('climb.delete')),
     );
   };
@@ -970,12 +965,10 @@ function viewShare(token) {
       } catch (err) { fail(err); e.target.disabled = false; }
     };
     fill(box,
-      h('p', { class: 'muted small' }, t('share.received')),
+      h('p', { class: 'muted small' }, sh.owner ? t('share.receivedFrom', { n: sh.owner.name }) : t('share.received')),
       h('h1', { class: 'row' }, swatch(sh.color), colorName(sh.color), h('span', { class: 'grade-pill' }, grade(sh.grade))),
-      sh.photoUrl && h('div', { class: 'stage' },
-        h('img', { src: sh.photoUrl, alt: '', decoding: 'async' }),
-        holdsOverlay(sh.holds),
-        sh.tap && h('span', { class: 'marker', style: { '--x': `${sh.tap.x * 100}%`, '--y': `${sh.tap.y * 100}%` } })),
+      sh.owner && h('a', { class: 'row person', href: `#/u/${sh.owner.handle}` }, avatar(sh.owner), h('span', {}, h('strong', {}, sh.owner.name), h('span', { class: 'muted small' }, ` @${sh.owner.handle}`))),
+      sh.photoUrl && climbStage(sh.photoUrl, sh),
       sh.ai && h('div', { class: 'chips' },
         sh.ai.wallAngle && h('span', { class: 'chip' }, t(`angle.${sh.ai.wallAngle}`)),
         (sh.ai.holdTypes ?? []).map((x) => h('span', { class: 'chip' }, t(`hold.${x}`)))),
@@ -984,6 +977,306 @@ function viewShare(token) {
         : h('button', { class: 'btn go big block', type: 'button', onclick: add }, t('share.add')));
   }, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('share.gone') : t('error.generic'))));
   return box;
+}
+
+// ---------- foto com zoom ----------
+/** Quadro da foto com pinça para ampliar só a foto (não a página) e arrastar quando ampliada.
+ *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom. */
+function stage(content, onTap) {
+  const inner = h('div', { class: 'zoom' }, content);
+  const reset = h('button', { class: 'zoom-reset', type: 'button', hidden: true, onclick: (e) => { e.stopPropagation(); z.k = 1; z.x = z.y = 0; apply(); } }, t('zoom.reset'));
+  const box = h('div', { class: 'stage' }, inner, reset);
+  const z = { k: 1, x: 0, y: 0 };
+  const pts = new Map();
+  let start = null; // gesto atual: posição, zoom e distância iniciais
+  const apply = () => {
+    const w = box.clientWidth, hh = box.clientHeight;
+    // Não deixa a foto sair do quadro.
+    z.x = Math.min(0, Math.max(w - w * z.k, z.x));
+    z.y = Math.min(0, Math.max(hh - hh * z.k, z.y));
+    inner.style.transform = `translate(${z.x}px, ${z.y}px) scale(${z.k})`;
+    box.classList.toggle('zoomed', z.k > 1.01);
+    reset.hidden = z.k <= 1.01;
+  };
+  const snapshot = () => {
+    const [a, b] = [...pts.values()];
+    const r = box.getBoundingClientRect();
+    const mid = b ? { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top } : { x: a.x - r.left, y: a.y - r.top };
+    return { mid, dist: b ? Math.hypot(a.x - b.x, a.y - b.y) : 0, k: z.k, x: z.x, y: z.y, n: pts.size };
+  };
+  box.addEventListener('pointerdown', (e) => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY, t0: Date.now(), x0: e.clientX, y0: e.clientY });
+    start = snapshot();
+    if (pts.size > 1) start.multi = true;
+  });
+  box.addEventListener('pointermove', (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    p.x = e.clientX; p.y = e.clientY;
+    if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8) start.moved = true;
+    const now = snapshot();
+    if (pts.size === 2 && start.dist) {
+      const k = Math.min(5, Math.max(1, start.k * (now.dist / start.dist)));
+      // Mantém o ponto entre os dedos parado enquanto amplia.
+      z.x = now.mid.x - ((start.mid.x - start.x) / start.k) * k;
+      z.y = now.mid.y - ((start.mid.y - start.y) / start.k) * k;
+      z.k = k;
+      apply();
+    } else if (pts.size === 1 && z.k > 1.01 && start.n === 1) {
+      z.x = start.x + (now.mid.x - start.mid.x);
+      z.y = start.y + (now.mid.y - start.mid.y);
+      apply();
+    }
+  });
+  const end = (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    pts.delete(e.pointerId);
+    if (e.type === 'pointerup' && onTap && !pts.size && !start.multi && !start.moved && Date.now() - p.t0 < 600) {
+      const r = inner.getBoundingClientRect(); // já com o zoom aplicado
+      onTap(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)));
+    }
+    if (pts.size) start = { ...snapshot(), multi: true };
+  };
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', end);
+  return box;
+}
+
+/** Foto de um boulder com as agarras da via marcadas. */
+const climbStage = (url, c) => url && stage([
+  h('img', { src: url, alt: '', decoding: 'async' }),
+  holdsOverlay(c.holds),
+  c.tap && h('span', { class: 'marker', style: { '--x': `${c.tap.x * 100}%`, '--y': `${c.tap.y * 100}%` } })]);
+
+// ---------- social: perfil, amigos, ranking ----------
+const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+/** Foto de perfil, ou iniciais num círculo colorido (cor estável pelo @). */
+function avatar(p, size = 40) {
+  if (p?.avatarUrl) return h('img', { class: 'avatar', src: p.avatarUrl, alt: '', width: size, height: size, loading: 'lazy', style: { '--s': `${size}px` } });
+  const hue = [...(p?.handle ?? '')].reduce((n, ch) => n + ch.charCodeAt(0), 0) % HOLD_COLORS.length;
+  return h('span', { class: 'avatar', style: { '--s': `${size}px`, background: HOLD_COLORS[hue] } }, initials(p?.name));
+}
+const mondayIso = () => new Date(`${S.weekStart(new Date().toISOString())}T00:00:00`).toISOString();
+
+/** Criar ou editar o perfil (nome, @, foto). Resolve com o perfil salvo, ou null se cancelar. */
+function profileSheet() {
+  return new Promise((resolve) => {
+    const cur = state.profile;
+    const f = { name: cur?.name ?? '', handle: cur?.handle ?? '', file: null, preview: cur?.avatarUrl ?? null, error: '' };
+    const box = h('form', { class: 'stack' });
+    const save = async (e) => {
+      e.preventDefault();
+      const btn = box.querySelector('button[type=submit]');
+      btn.disabled = true;
+      try {
+        let blob = null;
+        if (f.file) blob = await compress(await toCanvas(f.file, 400), 0.85);
+        const res = await api('/profile', { method: 'PUT', body: { name: f.name, handle: f.handle, ...(blob ? { avatarType: blob.type } : {}) } });
+        if (res.upload) { await upload(res.upload, blob); res.avatarUrl = URL.createObjectURL(blob); }
+        delete res.upload;
+        state.profile = res;
+        $('#sheet').close();
+        resolve(res);
+      } catch (err) {
+        f.error = err.code === 'HANDLE_TAKEN' ? t('profile.taken') : err.code === 'INVALID_HANDLE' ? t('profile.handleRule') : '';
+        if (!f.error) fail(err);
+        btn.disabled = false;
+        draw();
+      }
+    };
+    const draw = () => fill(box,
+      h('h2', {}, cur ? t('profile.edit') : t('profile.create')),
+      !cur && h('p', { class: 'muted' }, t('profile.lead')),
+      h('label', { class: 'row avatar-pick' },
+        avatar({ ...cur, name: f.name, handle: f.handle, avatarUrl: f.preview }, 64),
+        h('span', { class: 'link' }, t('profile.photo')),
+        h('input', { type: 'file', accept: 'image/*', hidden: true, onchange: (e) => { f.file = e.target.files[0]; if (f.file) { f.preview = URL.createObjectURL(f.file); draw(); } } })),
+      h('label', { class: 'field' }, h('span', {}, t('profile.name')),
+        h('input', { type: 'text', required: true, maxlength: 40, value: f.name, autocomplete: 'name', oninput: (e) => (f.name = e.target.value) })),
+      h('label', { class: 'field' }, h('span', {}, t('profile.handle')),
+        h('div', { class: 'handle-input' }, h('span', {}, '@'),
+          h('input', {
+            type: 'text', required: true, minlength: 3, maxlength: 20, pattern: '[a-z0-9_.]{3,20}', value: f.handle,
+            autocapitalize: 'none', autocomplete: 'username', spellcheck: false,
+            oninput: (e) => { e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''); f.handle = e.target.value; },
+          })),
+        h('span', { class: `small ${f.error ? 'error' : 'muted'}` }, f.error || t('profile.handleRule'))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn ghost grow', type: 'button', onclick: () => { $('#sheet').close(); resolve(null); } }, t('settings.close')),
+        h('button', { class: 'btn primary grow', type: 'submit' }, t('settings.save'))));
+    box.addEventListener('submit', save);
+    draw();
+    openSheet(box);
+  });
+}
+/** Garante perfil antes de uma ação social. */
+const needProfile = async () => state.profile ?? profileSheet();
+
+async function pinClimb(c) {
+  if (!(await needProfile())) return;
+  const pinned = state.profile.pinned === c.id ? null : c.id;
+  try {
+    Object.assign(state.profile, { pinned: (await api('/profile', { method: 'PUT', body: { pinned } })).pinned });
+    toast(pinned ? t('pin.added') : t('pin.removed'));
+    if (pinned) playTick();
+    render();
+  } catch (err) { fail(err); }
+}
+
+/** Botão Seguir / Seguindo, com resposta na hora. */
+function followButton(p, onChange) {
+  const btn = h('button', { class: `btn small-btn ${p.following ? '' : 'primary'}`, type: 'button' }, p.following ? t('follow.following') : p.followsMe ? t('follow.back') : t('follow.follow'));
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!(await needProfile())) return;
+    const on = !p.following;
+    p.following = on;
+    btn.textContent = on ? t('follow.following') : t('follow.follow');
+    btn.classList.toggle('primary', !on);
+    if (on) playTick();
+    try {
+      Object.assign(p, await api(`/users/${p.handle}/follow`, { method: on ? 'POST' : 'DELETE' }));
+      onChange?.(p);
+    } catch (err) { p.following = !on; fail(err); onChange?.(p); }
+  });
+  return btn;
+}
+
+const reasonText = (s) => (s.reason === 'followsYou' ? t('suggest.followsYou')
+  : s.reason === 'sharedWithYou' ? t('suggest.shared')
+    : s.reason === 'via' ? t('suggest.via', { h: s.arg ?? '' })
+      : s.reason === 'gym' ? t('suggest.gym', { g: s.arg ?? '' }) : '');
+
+const social = { data: null, q: '', results: null };
+function viewFriends() {
+  const box = h('div', { class: 'stack' });
+  const me = state.profile;
+  const search = debounce(async (q) => {
+    social.results = q.length >= 2 ? await api(`/users?q=${encodeURIComponent(q)}`).catch(() => []) : null;
+    draw();
+  }, 300);
+  const person = (p, extra) => h('li', {}, h('a', { class: 'person-row', href: `#/u/${p.handle}` },
+    avatar(p), h('div', { class: 'grow' }, h('strong', {}, p.name), h('div', { class: 'muted small' }, extra ?? `@${p.handle}`)),
+    !p.me && p.following !== undefined && followButton(p)));
+  const draw = () => {
+    const d = social.data;
+    fill(box,
+      h('h1', {}, t('tab.friends')),
+      me
+        ? h('a', { class: 'card row me-card', href: `#/u/${me.handle}` }, avatar(me, 56),
+          h('div', { class: 'grow' }, h('strong', {}, me.name), h('div', { class: 'muted small' }, `@${me.handle}`),
+            d && h('div', { class: 'small num' }, t('profile.counts', { a: d.followers, b: d.following }))),
+          h('span', { class: 'link' }, t('profile.see')))
+        : h('section', { class: 'card stack' }, h('h2', {}, t('profile.create')), h('p', { class: 'muted' }, t('profile.lead')),
+          h('button', { class: 'btn primary big block', type: 'button', onclick: async () => { if (await profileSheet()) { social.data = null; render(); } } }, t('profile.create'))),
+
+      h('label', { class: 'field' }, h('span', {}, t('friends.search')),
+        h('input', { type: 'search', value: social.q, placeholder: t('friends.searchHint'), autocapitalize: 'none', oninput: (e) => { social.q = e.target.value.trim(); search(social.q); } })),
+      social.results && (social.results.length
+        ? h('ul', { class: 'list card' }, social.results.map((p) => person(p)))
+        : h('p', { class: 'muted small' }, t('friends.none'))),
+
+      me && h('section', { class: 'card' },
+        h('h2', {}, t('rank.title')),
+        h('p', { class: 'muted small' }, t('rank.lead')),
+        !d ? h('p', { class: 'small detect-status loading' }, t('friends.loading'))
+          : d.ranking.length > 1
+            ? h('ol', { class: 'list rank' }, d.ranking.map((p, i) => h('li', { class: p.me ? 'me' : '' },
+              h('a', { class: 'person-row', href: `#/u/${p.handle}` },
+                h('span', { class: `pos num ${i < 3 ? `top${i + 1}` : ''}` }, String(i + 1)),
+                avatar(p), h('strong', { class: 'grow' }, p.me ? t('rank.you') : p.name),
+                h('span', { class: 'num xp-pill' }, `${p.weekXp} XP`)))))
+            : h('p', { class: 'muted' }, t('rank.empty'))),
+
+      me && d?.suggestions.length > 0 && h('section', {},
+        h('h2', {}, t('suggest.title')),
+        h('ul', { class: 'suggest' }, d.suggestions.map((s) => h('li', { class: 'card' },
+          h('a', { href: `#/u/${s.handle}` }, avatar(s, 56), h('strong', {}, s.name), h('span', { class: 'muted small' }, reasonText(s))),
+          followButton(s, () => { social.data = null; }))))),
+    );
+  };
+  draw();
+  if (me && !social.data) {
+    api(`/social?since=${encodeURIComponent(mondayIso())}`).then((x) => { social.data = x; if (location.hash === '#/friends') draw(); }, fail);
+  }
+  return box;
+}
+
+function viewUser(handle) {
+  const box = h('div', { class: 'stack' }, h('p', { class: 'small detect-status loading' }, t('friends.loading')));
+  const draw = (u) => fill(box,
+    h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
+    h('section', { class: 'profile-head' },
+      avatar(u, 88),
+      h('div', { class: 'grow' },
+        h('h1', {}, u.name), h('div', { class: 'muted' }, `@${u.handle}`),
+        h('div', { class: 'row small num profile-counts' },
+          h('span', { class: 'level-pill num' }, t('xp.level', { n: u.level })),
+          t('profile.counts', { a: u.followers, b: u.follows })))),
+    u.me
+      ? h('button', { class: 'btn block', type: 'button', onclick: async () => { if (await profileSheet()) load(); } }, t('profile.edit'))
+      : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends'))),
+
+    h('section', { class: 'card stack pinned' },
+      h('h2', {}, t('pin.title')),
+      u.pinned
+        ? [
+          h('div', { class: 'row' }, swatch(u.pinned.color), h('strong', {}, colorName(u.pinned.color)), h('span', { class: 'grade-pill' }, grade(u.pinned.grade)),
+            h('span', { class: 'grow' }), h('span', { class: `badge ${u.pinned.sent ? 'sent' : 'project'}` }, u.pinned.sent ? t('pin.sent') : t('result.project'))),
+          climbStage(u.pinned.photoUrl, u.pinned),
+          u.pinned.tries > 1 && h('p', { class: 'muted small' }, t('pin.tries', { n: u.pinned.tries })),
+          !u.me && u.friends && tryButton(u, u.pinned),
+        ]
+        : h('p', { class: 'muted' }, u.me ? t('pin.emptyMe') : t('pin.empty'))),
+
+    u.stats
+      ? [
+        h('div', { class: 'kpis' },
+          [[u.stats.sessions, t('profile.sessions')], [u.stats.sends, t('profile.sends')],
+            [u.stats.maxGrade == null ? '—' : grade(u.stats.maxGrade), t('profile.max')], [u.stats.streak, t('streak.weeks')]]
+            .map(([v, l]) => h('div', { class: 'kpi' }, h('b', {}, String(v)), h('span', {}, l)))),
+        h('h2', {}, t('profile.history')),
+        u.climbs.length
+          ? h('div', { class: 'gallery' }, u.climbs.map((c) => h('button', { type: 'button', onclick: () => friendClimbSheet(u, c) },
+            h('img', { src: c.thumbUrl, alt: `${colorName(c.color)} ${grade(c.grade)}`, loading: 'lazy', decoding: 'async', width: 200, height: 200 }),
+            h('span', { class: 'tag' }, swatch(c.color), grade(c.grade)))))
+          : h('p', { class: 'muted' }, t('history.empty')),
+      ]
+      : h('section', { class: 'card locked' }, icon('lock'), h('p', {}, u.following ? t('profile.lockedBack') : t('profile.locked'))),
+  );
+  const load = () => api(`/users/${handle}`).then(draw, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('profile.notFound') : t('error.generic'))));
+  load();
+  return box;
+}
+
+/** "Quero tentar": copia o boulder do amigo para os seus projetos. */
+function tryButton(u, c) {
+  return h('button', {
+    class: 'btn go block', type: 'button',
+    onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const climb = await api(`/users/${u.handle}/climbs/${c.id}/copy`, { method: 'POST' });
+        state.climbs.push(climb);
+        playTick();
+        toast(t('share.added'));
+        $('#sheet').open && $('#sheet').close();
+        location.hash = `#/climb/${climb.id}`;
+      } catch (err) { fail(err); e.target.disabled = false; }
+    },
+  }, t('friends.try'));
+}
+
+function friendClimbSheet(u, c) {
+  openSheet(h('div', { class: 'stack' },
+    h('h2', { class: 'row' }, swatch(c.color), colorName(c.color), h('span', { class: 'grade-pill' }, grade(c.grade)),
+      h('span', { class: 'grow' }), h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))),
+    climbStage(c.photoUrl, c),
+    h('p', { class: 'muted small' }, fmtDate(c.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })),
+    !u.me && tryButton(u, c),
+    h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
 }
 
 // ---------- tela: histórico (calendário + sessões + galeria) ----------
@@ -1216,6 +1509,8 @@ const ROUTES = [
   [/^#\/history$/, viewHistory, 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
   [/^#\/progress$/, viewProgress, 'progress'],
+  [/^#\/friends$/, viewFriends, 'friends'],
+  [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'friends'],
 ];
 
 function render() {
