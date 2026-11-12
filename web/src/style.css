@@ -659,3 +659,18 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .install-steps { margin: 0; padding-left: 22px; line-height: 1.9; font-weight: 600; }
 .ios-share { display: inline-grid; vertical-align: middle; color: var(--blue); }
 .ios-share .line-ico { width: 20px; height: 20px; }
+
+/* Feed */
+.feed-card { display: flex; flex-direction: column; gap: 12px; }
+.feed-card.example { opacity: .8; border-style: dashed; }
+.feed-head { gap: 10px; align-items: center; }
+.feed-head .name-link { color: inherit; text-decoration: none; }
+.feed-color { height: 120px; border-radius: 16px; display: grid; place-items: center; }
+.feed-color span { background: rgb(15 18 38 / .75); color: #fff; padding: 4px 12px; border-radius: 10px; font-weight: 900; font-family: var(--display); }
+.feed-actions { align-items: center; }
+.fire-btn { gap: 2px; }
+.fire-btn.on { --face: var(--orange-soft); --base: var(--orange); color: var(--orange-deep); }
+.feed-sentinel { height: 1px; }
+.center { text-align: center; }
+.progress-link { gap: 12px; text-decoration: none; color: inherit; align-items: center; }
+.progress-link .ico-wrap { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }

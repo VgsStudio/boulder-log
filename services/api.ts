@@ -278,6 +278,24 @@ async function climbsSince(sub: string, since: number) {
   return items;
 }
 
+/** Boulders de uma pessoa antes de `before` (ms), do mais novo ao mais velho, no máximo `limit`. */
+async function climbsBefore(sub: string, before: number, limit: number) {
+  const out = await ddb.send(new QueryCommand({
+    TableName: TABLE,
+    KeyConditionExpression: 'pk = :pk AND sk BETWEEN :a AND :b',
+    ExpressionAttributeValues: { ':pk': pkOf(sub), ':a': 'CLIMB#', ':b': `CLIMB#${before.toString(36).padStart(9, '0')}` },
+    ScanIndexForward: false, Limit: limit,
+  }));
+  return out.Items ?? [];
+}
+const mutualFriends = async (sub: string) => {
+  const [following, followers] = await Promise.all([followsOf(sub, 'FOLLOWS#'), followsOf(sub, 'FOLLOWER#')]);
+  const back = new Set(followers);
+  return following.filter((u) => back.has(u));
+};
+const FEED_PAGE = 20;
+const MAX_FEED_FRIENDS = 100;
+
 // ---------- cota diária de IA (contadores atômicos: por conta e do app inteiro) ----------
 const GLOBAL_PK = 'AIQUOTA#GLOBAL';
 const quotaKey = (pk: string) => ({ pk, sk: `AIQUOTA#${nowIso().slice(0, 10)}` });
@@ -706,6 +724,74 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const src = await getItem(pkOf(them), `CLIMB#${cid}`);
       return json(201, await copyClimb(sub, them, cid, src, {}));
     }
+    // ---------- feed: o que os amigos (mútuos) mandaram e os projetos novos ----------
+    case 'GET /api/feed': {
+      const beforeIso = event.queryStringParameters?.before;
+      const before = beforeIso ? Date.parse(beforeIso) : Date.now() + 60_000;
+      if (!Number.isFinite(before)) bad('before');
+      const friends = (await mutualFriends(sub)).slice(0, MAX_FEED_FRIENDS);
+      // ponytail: uma Query por amigo por página; com centenas de amigos, um feed materializado (fan-out na escrita).
+      const pages = await Promise.all(friends.map(async (u) => (await climbsBefore(u, before, FEED_PAGE)).map((c) => ({ u, c }))));
+      const items = pages.flat()
+        .filter(({ c }) => isSend(c) || (c.result === 'project' && !c.projectId && !c.sharedBy))
+        .sort((a, b) => String(b.c.createdAt).localeCompare(String(a.c.createdAt)))
+        .slice(0, FEED_PAGE);
+      const people = new Map((await profilesOf([...new Set(items.map((x) => x.u))])).map((p) => [subOfPk(p.pk), p]));
+      // Minhas 🔥 nestes boulders.
+      const keys = items.map(({ u, c }) => ({ pk: pkOf(u), sk: `REACT#${String(c.sk).slice(6)}#${sub}` }));
+      const mine = new Set<string>();
+      for (let i = 0; i < keys.length; i += 100) {
+        const r = await ddb.send(new BatchGetCommand({ RequestItems: { [TABLE]: { Keys: keys.slice(i, i + 100), ProjectionExpression: 'sk' } } }));
+        for (const x of r.Responses?.[TABLE] ?? []) mine.add(String(x.sk).split('#')[1]);
+      }
+      const out = await Promise.all(items.filter(({ u }) => people.has(u)).map(async ({ u, c }) => {
+        const cid = String(c.sk).slice(6);
+        // Projeto mandado numa tentativa: a foto e as agarras estão na raiz.
+        const root = c.projectId ? await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(u), sk: `CLIMB#${c.projectId}` } })).then((r) => r.Item) : c;
+        const photoOf = root?.photoType ? String(root.sk).slice(6) : null;
+        return {
+          id: cid, rootId: root ? String(root.sk).slice(6) : cid, owner: await card(people.get(u)!), color: c.color, grade: c.grade, result: c.result, createdAt: c.createdAt,
+          projectSend: !!c.projectId && isSend(c), holds: root?.holds ?? null,
+          thumbUrl: photoOf ? await signGet(photoKey(u, photoOf, 'thumb')) : null,
+          photoUrl: photoOf ? await signGet(photoKey(u, photoOf, 'full')) : null,
+          fire: Number(c.fire ?? 0), fired: mine.has(cid),
+        };
+      }));
+      return json(200, { items: out, friends: friends.length, next: items.length === FEED_PAGE ? items[items.length - 1].c.createdAt : null });
+    }
+    case 'POST /api/feed/{handle}/{id}/fire':
+    case 'DELETE /api/feed/{handle}/{id}/fire': {
+      // 🔥 num boulder de amigo (mútuo). Marcador por pessoa + contador no boulder.
+      const them = await subOfHandle(event.pathParameters?.handle);
+      const cid = id(pid, 'id');
+      if (them === sub || !(await isFollowing(sub, them)) || !(await isFollowing(them, sub))) throw new HttpError(403, 'NOT_FRIENDS');
+      const climb = await getItem(pkOf(them), `CLIMB#${cid}`);
+      const mark = { pk: pkOf(them), sk: `REACT#${cid}#${sub}` };
+      const on = event.routeKey.startsWith('POST');
+      try {
+        await ddb.send(new TransactWriteCommand({
+          TransactItems: [
+            on ? { Put: { TableName: TABLE, Item: { ...mark, at: nowIso() }, ConditionExpression: 'attribute_not_exists(pk)' } }
+              : { Delete: { TableName: TABLE, Key: mark, ConditionExpression: 'attribute_exists(pk)' } },
+            { Update: { TableName: TABLE, Key: { pk: pkOf(them), sk: `CLIMB#${cid}` }, UpdateExpression: 'ADD fire :d', ExpressionAttributeValues: { ':d': on ? 1 : -1 } } },
+          ],
+        }));
+      } catch (e) {
+        if ((e as Error).name !== 'TransactionCanceledException') throw e; // já estava assim: nada a fazer
+        return json(200, { fired: on, fire: Number(climb.fire ?? 0) });
+      }
+      if (on) {
+        const me = await profileOf(sub);
+        const pt = ((await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk: pkOf(them), sk: 'SETTINGS' } }))).Item?.pushLang ?? 'pt') === 'pt';
+        await pushTo(them, {
+          title: pt ? `🔥 ${me?.name} curtiu seu V${climb.grade}` : `🔥 ${me?.name} liked your V${climb.grade}`,
+          body: pt ? 'Seus amigos estão de olho na sua evolução.' : 'Your friends are watching you progress.',
+          url: `/#/climb/${cid}`, tag: `fire-${cid}`,
+        }).catch(() => {});
+      }
+      return json(200, { fired: on, fire: Number(climb.fire ?? 0) + (on ? 1 : -1) });
+    }
+
     case 'GET /api/social': {
       // Ranking da semana (você + quem você segue) e "talvez você conheça".
       const since = Date.parse(str(event.queryStringParameters?.since ?? '', 40, 'since'));

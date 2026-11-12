@@ -1632,6 +1632,8 @@ function viewUser(handle, isTab = false) {
       : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends')),
         h('span', { class: 'grow' }), shareProfileButton(u)),
     u.me && friendsCard(),
+    u.me && h('a', { class: 'card row progress-link', href: '#/progress' }, h('span', { class: 'ico-wrap' }, lineIcon('M4 19h16M6 16l4-5 3 3 5-7')),
+      h('div', { class: 'grow' }, h('strong', {}, t('tab.progress')), h('div', { class: 'muted small' }, t('profile.progressLead'))), h('span', { class: 'muted' }, '›')),
 
     h('section', { class: 'card stack pinned' },
       h('h2', {}, t('pin.title')),
@@ -1723,6 +1725,107 @@ function friendClimbSheet(u, c, list = [c]) {
     h('p', { class: 'muted small' }, fmtDate(c.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })),
     !u.me && tryButton(u, c),
     h('button', { class: 'btn ghost block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
+}
+
+// ---------- tela: feed ----------
+const relTime = (iso) => {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(lang === 'pt' ? 'pt-BR' : 'en', { numeric: 'auto' });
+  if (s < 3600) return rtf.format(-Math.max(1, Math.round(s / 60)), 'minute');
+  if (s < 86400) return rtf.format(-Math.round(s / 3600), 'hour');
+  if (s < 7 * 86400) return rtf.format(-Math.round(s / 86400), 'day');
+  return fmtDate(iso, { day: 'numeric', month: 'short' });
+};
+const feed = { items: [], next: undefined, loading: false, friends: null };
+/** Exemplos (marcados como exemplo) para o feed vazio mostrar como vai ficar. */
+const FEED_EXAMPLES = [
+  { owner: { name: t('feed.exName1'), handle: 'exemplo' }, color: 'yellow', grade: 3, result: 'flash', ago: 2 },
+  { owner: { name: t('feed.exName2'), handle: 'exemplo' }, color: 'purple', grade: 4, result: 'sent', projectSend: true, ago: 5 },
+  { owner: { name: t('feed.exName3'), handle: 'exemplo' }, color: 'blue', grade: 5, result: 'project', ago: 26 },
+];
+const feedLine = (c) => t(c.result === 'project' ? 'feed.project' : c.projectSend ? 'feed.projectSend' : c.result === 'flash' ? 'feed.flash' : 'feed.sent',
+  { c: colorName(c.color).toLowerCase(), g: grade(c.grade) });
+
+function feedCard(c, example = false) {
+  const fireBtn = !example && h('button', {
+    class: `btn small-btn fire-btn ${c.fired ? 'on' : ''}`, type: 'button', 'aria-pressed': String(!!c.fired),
+    onclick: async (e) => {
+      const b = e.currentTarget;
+      const on = !c.fired;
+      Object.assign(c, { fired: on, fire: c.fire + (on ? 1 : -1) });
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); b.lastChild.textContent = c.fire ? ` ${c.fire}` : '';
+      if (on) playTick();
+      try { Object.assign(c, await api(`/feed/${c.owner.handle}/${c.id}/fire`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { fail(err); }
+    },
+  }, '🔥', h('span', {}, c.fire ? ` ${c.fire}` : ''));
+  return h('article', { class: `card feed-card ${example ? 'example' : ''}` },
+    h('div', { class: 'row feed-head' },
+      example ? avatar(c.owner, 40) : h('a', { href: `#/u/${c.owner.handle}` }, avatar(c.owner, 40)),
+      h('div', { class: 'grow' },
+        h('div', {}, example ? h('strong', {}, c.owner.name) : h('a', { href: `#/u/${c.owner.handle}`, class: 'name-link' }, h('strong', {}, c.owner.name)), ' ', h('span', {}, feedLine(c))),
+        h('div', { class: 'muted small' }, example ? t('feed.ago', { n: c.ago }) : relTime(c.createdAt))),
+      example ? h('span', { class: 'badge' }, t('feed.example')) : h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))),
+    c.photoUrl
+      ? climbStage(c.photoUrl, c, () => friendClimbSheet({ handle: c.owner.handle, name: c.owner.name, me: false, friends: true }, { ...c, id: c.rootId }))
+      : h('div', { class: 'feed-color', style: { background: SWATCH[c.color] ?? 'var(--surface-2)' } }, h('span', {}, grade(c.grade))),
+    !example && h('div', { class: 'row feed-actions' }, fireBtn, h('span', { class: 'grow' }),
+      h('button', { class: 'link small', type: 'button', onclick: () => friendClimbSheet({ handle: c.owner.handle, name: c.owner.name, me: false, friends: true }, { ...c, id: c.rootId }) }, t('friends.try'))));
+}
+
+/** Pessoas para seguir, intercaladas no feed (sugestões do /social). */
+function followCard() {
+  const s = social.data?.suggestions ?? [];
+  if (!s.length) return null;
+  return h('section', { class: 'card stack' }, h('h2', {}, t('suggest.title')),
+    h('ul', { class: 'suggest' }, s.slice(0, 8).map((p) => h('li', { class: 'card' },
+      h('a', { href: `#/u/${p.handle}` }, avatar(p, 56), h('strong', {}, p.name), h('span', { class: 'muted small' }, reasonText(p))),
+      followButton(p, () => { social.data = null; feed.items = []; feed.next = undefined; })))));
+}
+
+function viewFeed() {
+  const box = h('div', { class: 'stack' });
+  const list = h('div', { class: 'stack' });
+  const sentinel = h('div', { class: 'feed-sentinel' });
+  const draw = () => {
+    const empty = feed.next === null && !feed.items.length;
+    fill(list,
+      feed.items.flatMap((c, i) => [feedCard(c), i === 4 && followCard()]),
+      empty && [
+        h('section', { class: 'card stack' }, h('h2', {}, t('feed.emptyTitle')), h('p', { class: 'muted' }, feed.friends ? t('feed.emptyFriends') : t('feed.emptyLead')),
+          h('a', { class: 'btn primary block', href: '#/friends' }, t('feed.find'))),
+        followCard(),
+        FEED_EXAMPLES.map((c) => feedCard(c, true)),
+      ],
+      feed.items.length > 0 && feed.items.length < 5 && followCard(),
+      feed.loading && h('p', { class: 'small detect-status loading' }, t('friends.loading')),
+      feed.next === null && feed.items.length > 0 && h('p', { class: 'muted small center' }, t('feed.end')));
+  };
+  const load = async () => {
+    if (feed.loading || feed.next === null) return;
+    feed.loading = true; draw();
+    try {
+      const qs = feed.next ? `?before=${encodeURIComponent(feed.next)}` : '';
+      const r = await api(`/feed${qs}`);
+      feed.items.push(...r.items); feed.next = r.next; feed.friends = r.friends;
+    } catch (err) { fail(err); feed.next = null; }
+    feed.loading = false; draw();
+  };
+  if (guestMode) {
+    fill(box, h('h1', {}, t('tab.feed')),
+      h('section', { class: 'card stack' }, h('h2', {}, t('feed.guestTitle')), h('p', { class: 'muted' }, t('feed.guestLead')),
+        h('button', { class: 'btn primary block', type: 'button', onclick: () => showAuth({ mode: 'signup' }) }, t('auth.signup'))),
+      FEED_EXAMPLES.map((c) => feedCard(c, true)));
+    return box;
+  }
+  fill(box, h('h1', {}, t('tab.feed')), list, sentinel);
+  // Rolagem infinita: carrega a próxima página quando o fim aparece.
+  const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) load(); }, { rootMargin: '600px' });
+  io.observe(sentinel);
+  if (!social.data) api(`/social?since=${encodeURIComponent(mondayIso())}`).then((x) => { social.data = x; draw(); }, () => {});
+  // Ao voltar para a aba, recomeça do topo com o que for novo.
+  feed.items = []; feed.next = undefined;
+  draw(); load();
+  return box;
 }
 
 // ---------- tela: histórico (calendário + sessões + galeria) ----------
@@ -2013,7 +2116,7 @@ function appTour(onDone) {
     { el: '#tab-cam', text: t('tour.cam') },
     { el: () => [...document.querySelectorAll('main .btn.primary.big, main .btn.go.big')][0], text: t('tour.session') },
     { el: '#streak-pill:not([hidden])', text: t('tour.streak') },
-    { el: '#tabbar a[data-tab="progress"]', text: t('tour.progress') },
+    { el: '#tabbar a[data-tab="feed"]', text: t('tour.feed') },
     { el: '#tabbar a[data-tab="profile"]', text: t('tour.profile') },
     { el: '#open-settings', text: t('tour.settings') },
   ], onDone);
@@ -2220,7 +2323,8 @@ const ROUTES = [
   [/^#\/climb\/([a-z0-9]{19})$/, viewClimb, null],
   [/^#\/history$/, viewHistory, 'history'],
   [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
-  [/^#\/progress$/, viewProgress, 'progress'],
+  [/^#\/progress$/, viewProgress, 'profile'],
+  [/^#\/feed$/, viewFeed, 'feed'],
   [/^#\/me$/, viewMe, 'profile'],
   [/^#\/friends$/, viewFriends, 'profile'],
   [/^#\/u\/([a-z0-9_.]{3,20})$/, viewUser, 'profile'],
