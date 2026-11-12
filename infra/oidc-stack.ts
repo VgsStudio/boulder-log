@@ -12,7 +12,8 @@ export interface OidcStackProps extends StackProps {
 export class OidcStack extends Stack {
   constructor(scope: Construct, id: string, props: OidcStackProps) {
     super(scope, id, props);
-    const [owner, repo] = props.githubRepoClaim.split('/');
+    // Vários repositórios separados por vírgula (ex.: durante a troca de nome do repositório).
+    const repos = props.githubRepoClaim.split(',').map((r) => r.trim().split('/'));
     const q = 'hnb659fds'; // qualificador padrão do cdk bootstrap
     const role = new iam.Role(this, 'DeployRole', {
       roleName: 'github-actions-boulder-log-deploy',
@@ -23,10 +24,10 @@ export class OidcStack extends Stack {
           StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
           // Aceita a claim clássica e a imutável (Owner@id/repo@id), só na main.
           StringLike: {
-            'token.actions.githubusercontent.com:sub': [
+            'token.actions.githubusercontent.com:sub': repos.flatMap(([owner, repo]) => [
               `repo:${owner}/${repo}:ref:refs/heads/main`,
               `repo:${owner}@*/${repo}@*:ref:refs/heads/main`,
-            ],
+            ]),
           },
         },
       ),
