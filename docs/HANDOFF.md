@@ -21,7 +21,7 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 
 | Área | O que faz |
 |---|---|
-| **Abas** | Só ícones (o nome fica no `aria-label`, via `data-aria`): **Home** (casinha, `#/feed`) · Sessão (`#/`, continua sendo a tela inicial) · **📷 (centro)** · Histórico · Perfil. A aba ativa ganha um risco de giz. A Evolução fica dentro do Perfil (`#/progress`). |
+| **Abas** | Só ícones (o nome fica no `aria-label`, via `data-aria`): **Home** (casinha, `#/feed`) · Sessão (`#/`). O app abre na **Home**; com sessão aberta (ou sem conta), abre na Sessão · **📷 (centro)** · Histórico · Perfil. A aba ativa ganha um risco de giz. A Evolução fica dentro do Perfil (`#/progress`). |
 | **Câmera** (centro da barra) | Foto → novo boulder direto. Sem sessão aberta, abre uma no último ginásio usado. |
 | **Registro rápido** | Na sessão: cor + grau + resultado numa janela, sem foto. |
 | **Sessão** | Começa no ginásio (reconhecido por GPS, até 500 m). Registra boulders e encerra com sensação/nota. **Encerra sozinha**: >1 km do ginásio (com o app aberto, a cada 5 min) ou 4 h sem registro. |
@@ -37,7 +37,7 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 | **Fotos rápidas** | Ao salvar, o app gera uma **prévia de 24 px** (`lqip`, data URL de ~1 KB) que vai junto do boulder. Galerias mostram quadrados escuros pulsando → prévia borrada → miniatura com esmaecer, carregando só o que aparece na rolagem (`loading=lazy`). Boulders antigos ganham a prévia sozinhos (até 30 por abertura, 5 s depois de abrir: baixa a miniatura e grava com PATCH). |
 | **Home** (ex-Feed) | Boulders mandados e projetos novos dos **amigos** (mútuos), rolagem infinita, **🔥** (com notificação ao dono), "Quero tentar", pessoas para seguir intercaladas e cartões de **Exemplo** quando vazio. |
 | **Bloquear** | No perfil da pessoa: desfaz o seguir dos dois lados, impede seguir de novo e tira a pessoa de sugestões e busca. |
-| **Notificações** | Web Push (no iPhone, só com o app na tela inicial). **Lembrete diário personalizado** ("Vitor, …") 1 h antes do horário em que a pessoa costuma começar as sessões (aprendido; pode fixar em Ajustes). A mensagem depende da situação: sequência em risco no fim de semana, projeto esperando, meta da semana, semana em branco ou "semana garantida". Não envia se a pessoa já escalou no dia. Também avisa novo seguidor e 🔥. Ajustes: liga/desliga, horário e "enviar teste". |
+| **Notificações** | Web Push (no iPhone, só com o app na tela inicial). **Lembrete diário personalizado** ("Vitor, …") 1 h antes do horário em que a pessoa costuma começar as sessões (aprendido; pode fixar em Ajustes). A mensagem depende da situação: sequência em risco no fim de semana (sempre vence), projeto esperando, meta da semana, semana em branco ou "semana garantida". Ciclo de 4 dias: 2× a principal, 1× a segunda, 1× uma **variada** (dias sem parede, grau máximo +1, marco de vias mandadas, chamar um amigo). Continua 1 aviso por dia. Não envia se a pessoa já escalou no dia. Também avisa novo seguidor e 🔥. Ajustes: liga/desliga e horário (o "enviar teste" foi tirado). |
 | **App instalado / offline** | O service worker (`web/sw.js`) guarda o app e uma cópia dos dados: sem sinal, abre com aviso. Convite para instalar na tela inicial (passo a passo no iPhone, botão no Android). |
 | **Tutorial** | Na 1ª abertura, tela escura com destaque e balões (câmera, sessão, foguinho, feed, perfil, ajustes), e um passo na 1ª foto (tocar, segurar, pincel). Depois vem o convite de instalar e o das notificações. |
 | **Login** | Tela própria do app (entrar, criar conta, código por e-mail, esqueci a senha) + **Entrar com Google**. Google com o mesmo e-mail de uma conta existente é **vinculado** a ela (`services/presignup.ts`). Boas-vindas com nome e @ sugeridos na 1ª entrada. |
@@ -105,7 +105,7 @@ Os ids (`newId`) são ordenáveis pelo tempo (base36 dos ms), e é isso que perm
 `/api/profile`, `/api/users` (busca), `/api/users/{handle}` (+`/follow`, `/people?type=followers|following`, `/climbs/{id}/copy`), `/api/social`
 (ranking + sugestões), `/api/shares/{id}` (+`/accept`), `/api/feedback`, `DELETE /api/account`,
 `/api/feed` (+`/{handle}/{id}/fire`), `/api/users/{handle}/block`, `DELETE /api/climbs/{id}/share`,
-`/api/push/key|subscribe|unsubscribe|prefs|test`,
+`/api/push/key|subscribe|unsubscribe|prefs`,
 `/api/public/shares/{id}`, `/api/public/users/{handle}`.
 
 ---
