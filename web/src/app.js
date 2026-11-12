@@ -1,5 +1,11 @@
 // Chalkmark: SPA sem framework. Rotas por hash, dados em memória, API em /api.
 import './style.css';
+
+// Endereço principal: chalkmark.vsoller.com.br. O boulder.* continua respondendo e manda para lá,
+// mantendo o caminho e o # (links de boulder compartilhado e de perfil continuam valendo).
+if (location.hostname.startsWith('boulder.')) {
+  location.replace(`https://chalkmark.${location.hostname.slice('boulder.'.length)}${location.pathname}${location.search}${location.hash}`);
+}
 import { fmtDate, fmtDuration, fmtPct, lang, langChoice, setLang, t } from './i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.js';
 // detect.js é leve; o onnxruntime-web e o modelo (~10 MB) só baixam na primeira foto.
@@ -1782,6 +1788,7 @@ function settingsSheet() {
       h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close')))) }, t('terms.view')),
     h('button', { class: 'btn block', type: 'button', onclick: () => feedbackSheet() }, t('fb.menu')),
     h('button', { class: 'btn ghost danger block', type: 'button', onclick: logout }, t('settings.logout')),
+    h('p', { class: 'small legal-links' }, h('a', { href: '/termos.html', target: '_blank' }, t('legal.terms')), ' · ', h('a', { href: '/privacidade.html', target: '_blank' }, t('legal.privacy'))),
     h('button', { class: 'link small danger-link', type: 'button', onclick: deleteAccountSheet }, t('account.delete')),
   );
   draw();
@@ -1971,7 +1978,8 @@ function showAuth() {
     f.info && h('p', { class: 'auth-info' }, f.info),
     f.mode === 'login' && [email(), pw(t('auth.password'), 'current-password'), submit(t('auth.login')),
       h('button', { class: 'link small', type: 'button', onclick: () => go('forgot') }, t('auth.forgot'))],
-    f.mode === 'signup' && [email(), pw(t('auth.password'), 'new-password'), submit(t('auth.signup'))],
+    f.mode === 'signup' && [email(), pw(t('auth.password'), 'new-password'), submit(t('auth.signup')),
+      h('p', { class: 'small muted' }, t('auth.legal'), ' ', h('a', { href: '/termos.html', target: '_blank' }, t('legal.terms')), ' · ', h('a', { href: '/privacidade.html', target: '_blank' }, t('legal.privacy')))],
     f.mode === 'confirm' && [code(), submit(t('auth.confirm')),
       h('button', { class: 'link small', type: 'button', onclick: () => cognitoApi('ResendConfirmationCode', { Username: f.email }).then(() => go('confirm', t('auth.codeSent', { e: f.email })), (err) => { f.error = msg(err); draw(); }) }, t('auth.resend'))],
     f.mode === 'forgot' && [h('h2', {}, t('auth.forgotTitle')), email(), submit(t('auth.sendCode'))],

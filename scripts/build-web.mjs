@@ -51,7 +51,7 @@ const css = Object.keys(out.metafile.outputs).map((f) => path.basename(f)).find(
 
 const html = readFileSync(path.join(root, 'web/index.html'), 'utf8').replace('__JS__', js).replace('__CSS__', css);
 writeFileSync(path.join(dist, 'pages/index.html'), html);
-for (const f of ['manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'email/banner.png', 'privacidade.html', 'legal.css']) cpSync(path.join(root, 'web', f), path.join(dist, 'pages', f));
+for (const f of ['manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png', 'email/banner.png', 'privacidade.html', 'termos.html', 'legal.css']) cpSync(path.join(root, 'web', f), path.join(dist, 'pages', f));
 
 // Modelo de agarras (versão no nome do arquivo) e runtime WebAssembly.
 cpSync(path.join(root, 'web/models/holds-yolov8n-fp16.onnx'), path.join(dist, 'static/assets/models/holds-yolov8n-fp16.onnx'));
