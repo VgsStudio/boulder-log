@@ -1,0 +1,12 @@
+/* Páginas legais (privacidade): leves, sem o app. */
+:root { color-scheme: light dark; --bg: #eef1f6; --text: #151a33; --muted: #5d6685; --blue: #2f5bff; --card: #fff; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0f1226; --text: #eef0ff; --muted: #9aa0c8; --blue: #7d97ff; --card: #1a1e3a; } }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: 24px 18px 64px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 900; font-size: 1.2rem; color: var(--text); text-decoration: none; }
+.brand img { border-radius: 10px; }
+h1 { font-size: 2rem; line-height: 1.15; margin: 24px 0 4px; }
+h2 { font-size: 1.2rem; margin: 28px 0 8px; }
+a { color: var(--blue); }
+.muted { color: var(--muted); margin-top: 0; }
+li { margin: 6px 0; }

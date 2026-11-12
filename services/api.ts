@@ -23,7 +23,7 @@ const MAX_GRADE = 17;
 const SHARE_RE = /^[A-Za-z0-9_-]{22}$/;
 const SHARE_DAYS = 90;
 /** Versão do termo de uso das fotos (web/src/i18n.js, chaves terms.*). Mudou o texto → nova versão → novo aceite. */
-export const PHOTO_TERMS_VERSION = '2026-11-11';
+export const PHOTO_TERMS_VERSION = '2026-11-12';
 const URL_SECONDS = 3600;
 // @usuário: minúsculas, números, ponto e sublinhado.
 const HANDLE_RE = /^[a-z0-9_.]{3,20}$/;

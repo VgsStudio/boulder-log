@@ -6,7 +6,7 @@ import { boxLab, calibrate, COLORS, sampleLab, suggest, SWATCH } from './color.j
 import { detectHolds, growRegion, holdAt, routeHolds } from './detect.js';
 import { playFanfare, playSent, playTick, setSound, soundOn } from './sound.js';
 
-const PHOTO_TERMS_VERSION = '2026-11-11'; // igual a services/api.ts
+const PHOTO_TERMS_VERSION = '2026-11-12'; // igual a services/api.ts
 import * as S from './stats.js';
 
 const HOLD_TYPES = ['crimp', 'sloper', 'jug', 'pinch', 'pocket', 'volume', 'edge'];
