@@ -106,6 +106,7 @@ do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-
 - Gravação de sessões com campos mascarados, sem fotos (`img, canvas, .avatar` bloqueados) e com nomes de outras pessoas escondidos. Mapa de calor e erros automáticos; `fail()` também manda o erro.
 - Visitas: `$pageview` com `screen` (`home`, `session`, `new_climb`, `climb`, `history`, `progress`, `my_profile`, `user_profile`, `friends`, `shared_climb`).
 - Eventos: `climb_logged` (resultado, grau, foto, agarras sugeridas × corrigidas: `holds_added`/`holds_removed` medem o acerto do detector), `holds_detected` (quantas e em quantos ms), `holds_detect_failed`, `holds_edited`, `project_try`, `session_started`/`session_ended`/`session_auto_ended`, `follow`/`unfollow`, `fire`, `share_created`/`share_accepted`, `friend_climb_copied`, `profile_created`, `push_enabled`/`push_blocked`, `install_prompt_shown`, `feedback_sent`, `guest_prompt`/`guest_blocked`, `auth_login`/`auth_signup`/`auth_google_click`.
+- **MCP do PostHog** configurado nesta máquina (escopo local do Claude Code, fora do repo): `claude mcp add --transport http --scope local posthog https://mcp-eu.posthog.com/mcp --header "Authorization: Bearer <chave pessoal phx_>"`. Projeto 346656. A chave pessoal nunca vai para o repositório.
 - Ajustes → "Estatísticas de uso" desliga (fica em `cm:noStats`). Política de privacidade atualizada. CSP: `connect-src` inclui `eu.i.posthog.com` e `eu-assets.i.posthog.com`.
 
 ### Dados (DynamoDB, `pk`/`sk`)
