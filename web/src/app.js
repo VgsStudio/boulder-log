@@ -920,7 +920,15 @@ function viewNew() {
               holdsOverlay(d.route, d.boxes),
               // A bolinha do toque só enquanto não há via marcada (depois as caixas mostram tudo).
               d.tap && !d.route?.length && h('span', { class: 'marker', style: { '--x': `${d.tap.x * 100}%`, '--y': `${d.tap.y * 100}%` } })], onTap, d.zoom,
-              (x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } })),
+              (x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } },
+              d.paint && d.route ? holdBrush({
+                boxes: () => d.boxes ?? [], aspect: () => d.canvas.width / d.canvas.height,
+                isIn: (b) => d.route.includes(b), add: (b) => d.route.push(b),
+                remove: (b) => { if (b !== d.seed) d.route = d.route.filter((x) => x !== b); },
+                done: () => draw(),
+              }) : null)),
+            d.route && h('button', { class: `btn small-btn brush-btn ${d.paint ? 'primary' : ''}`, type: 'button', 'aria-pressed': String(!!d.paint), onclick: () => { d.paint = !d.paint; draw(); } },
+              '🖌 ', d.paint ? t('brush.on') : t('brush.off')),
             h('p', { class: `small detect-status ${d.detect ?? ''}` },
               d.detect === 'loading' ? t('detect.loading')
                 : d.detect === 'failed' ? t('detect.failed')
@@ -968,6 +976,26 @@ function viewNew() {
   // Veio do botão de câmera: já processa a foto.
   if (pendingPhoto) { const file = pendingPhoto; pendingPhoto = null; setTimeout(() => pickPhoto({ target: { files: [file], value: '' } }), 0); }
   return root;
+}
+
+/** Pincel de agarras: `boxes()` candidatas, `isIn(b)`/`add(b)`/`remove(b)` mexem na via, `done()` redesenha.
+ *  O 1º toque do traço decide se o traço inclui ou tira; cada agarra conta uma vez por traço. */
+function holdBrush({ boxes, aspect, isIn, add, remove, done }) {
+  let mode = null;
+  const touched = new Set();
+  return {
+    stroke(x, y, inner) {
+      const b = holdAt(boxes(), x, y, 0.012, aspect());
+      if (!b || touched.has(b)) return;
+      mode ??= isIn(b) ? 'remove' : 'add';
+      touched.add(b);
+      if (mode === 'add') { if (!isIn(b)) add(b); } else if (isIn(b)) remove(b);
+      try { navigator.vibrate?.(8); } catch {}
+      // Retorno na hora sem redesenhar (redesenhar no meio do gesto quebraria o arrasto).
+      inner.querySelector('.overlay')?.append(svg('rect', { class: mode === 'add' ? 'painted' : 'unpainted', x: b.x, y: b.y, width: b.w, height: b.h }));
+    },
+    end() { mode = null; touched.clear(); done(); },
+  };
 }
 
 /** Toque longo numa agarra marcada: início (verde) → topo (vermelha) → normal. */
@@ -1160,10 +1188,19 @@ function viewClimb(id) {
         ? h('section', { class: 'stack' },
           holdEdit.canvas
             ? scanning(holdEdit.status === 'loading', stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold, holdEdit.zoom,
-              (x, y) => { if (cycleRole(holdEdit.holds, x, y)) { playTick(); draw(); } }))
+              (x, y) => { if (cycleRole(holdEdit.holds, x, y)) { playTick(); draw(); } },
+              holdEdit.paint ? holdBrush({
+                boxes: () => holdEdit.boxes ?? [], aspect: () => holdEdit.canvas.width / holdEdit.canvas.height,
+                isIn: (b) => holdEdit.holds.some((x) => x === b || (b.x + b.w / 2 >= x.x && b.x + b.w / 2 <= x.x + x.w && b.y + b.h / 2 >= x.y && b.y + b.h / 2 <= x.y + x.h)),
+                add: (b) => holdEdit.holds.push(b),
+                remove: (b) => { holdEdit.holds = holdEdit.holds.filter((x) => !(x === b || (b.x + b.w / 2 >= x.x && b.x + b.w / 2 <= x.x + x.w && b.y + b.h / 2 >= x.y && b.y + b.h / 2 <= x.y + x.h))); },
+                done: () => draw(),
+              }) : null))
             : null,
           h('p', { class: `small detect-status ${holdEdit.status}` },
             holdEdit.status === 'loading' ? t('detect.loading') : holdEdit.status === 'failed' ? t('detect.failed') : t('holds.hint', { n: holdEdit.holds.length })),
+          holdEdit.boxes && h('button', { class: `btn small-btn brush-btn ${holdEdit.paint ? 'primary' : ''}`, type: 'button', 'aria-pressed': String(!!holdEdit.paint), onclick: () => { holdEdit.paint = !holdEdit.paint; draw(); } },
+            '🖌 ', holdEdit.paint ? t('brush.on') : t('brush.off')),
           h('div', { class: 'row' },
             h('button', { class: 'btn ghost grow', type: 'button', onclick: () => { holdEdit = null; draw(); } }, t('holds.cancel')),
             h('button', { class: 'btn primary grow', type: 'button', onclick: saveHolds }, t('holds.save'))))
@@ -1286,10 +1323,11 @@ function viewShare(token) {
 // ---------- foto com zoom ----------
 /** Quadro da foto com pinça para ampliar só a foto (não a página) e arrastar quando ampliada.
  *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom. */
-function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null) {
+function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null, paint = null) {
   const inner = h('div', { class: 'zoom' }, content);
   const reset = h('button', { class: 'zoom-reset', type: 'button', hidden: true, onclick: (e) => { e.stopPropagation(); z.k = 1; z.x = z.y = 0; apply(); } }, t('zoom.reset'));
-  const box = h('div', { class: 'stage' }, inner, reset);
+  // Pintar: com o pincel ligado, arrastar um dedo marca/desmarca as agarras por onde passa (a página não rola).
+  const box = h('div', { class: `stage ${paint ? 'painting' : ''}` }, inner, reset);
   const pts = new Map();
   let start = null; // gesto atual: posição, zoom e distância iniciais
   const apply = () => {
@@ -1334,6 +1372,11 @@ function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null) {
     if (!p) return;
     p.x = e.clientX; p.y = e.clientY;
     if (Math.hypot(p.x - p.x0, p.y - p.y0) > 8) start.moved = true;
+    if (paint && pts.size === 1 && start.n === 1 && !start.multi) {
+      start.painted = true;
+      paint.stroke(...at(e.clientX, e.clientY), inner);
+      return;
+    }
     const now = snapshot();
     if (pts.size === 2 && start.dist) {
       const k = Math.min(5, Math.max(1, start.k * (now.dist / start.dist)));
@@ -1353,6 +1396,7 @@ function stage(content, onTap, z = { k: 1, x: 0, y: 0 }, onLong = null) {
     if (!p) return;
     pts.delete(e.pointerId);
     clearTimeout(longTimer);
+    if (paint && start.painted && !pts.size) { paint.end(); return; }
     if (e.type === 'pointerup' && onTap && !pts.size && !start.multi && !start.moved && !start.long && Date.now() - p.t0 < 600) {
       onTap(...at(e.clientX, e.clientY));
     }

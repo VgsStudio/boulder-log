@@ -674,3 +674,9 @@ form.auth { min-height: 82dvh; justify-content: center; gap: 14px; max-width: 42
 .center { text-align: center; }
 .progress-link { gap: 12px; text-decoration: none; color: inherit; align-items: center; }
 .progress-link .ico-wrap { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
+
+/* Pincel: arrastar marca agarras; a página não rola sobre a foto */
+.stage.painting { touch-action: none; }
+.overlay rect.painted { stroke: #1fbf6a; stroke-width: 4; }
+.overlay rect.unpainted { stroke: #ff3d4f; stroke-width: 3; stroke-dasharray: 3 3; }
+.brush-btn { align-self: flex-start; }
