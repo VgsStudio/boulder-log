@@ -55,15 +55,20 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 ## 2. Arquitetura
 
 ```
-Navegador (SPA vanilla, sem framework)
- ├─ web/src/app.js        roteamento por hash e inicialização (entrada do bundle)
- ├─ web/src/core.js       h()/svg()/fill(), tema, login (Cognito), estado e API, fotos, componentes
- ├─ web/src/game.js       XP, nível, sequência, trilha, conquistas
- ├─ web/src/session.js    sessão, localização, encerramento automático
- ├─ web/src/climb.js      novo boulder (detector), detalhe, compartilhar, foto com zoom, ‹ ›
- ├─ web/src/social.js     perfil, amigos, ranking, seguidores, Home (feed)
- ├─ web/src/history.js    histórico e evolução
- ├─ web/src/settings.js   ajustes, tutorial, instalar, notificações, avaliação
+Navegador (SPA em React 19, JSX compilado pelo esbuild, sem Vite)
+ ├─ web/src/app.js          inicialização: config, login, dados, e monta <App/> em #root
+ ├─ web/src/ui/shell.jsx    casca: topo, barra de abas, rotas por hash, tela de login
+ ├─ web/src/ui/base.jsx     useStore, montar janelas, Seg/Stepper/Swatch/ClimbRow/FadeImg
+ ├─ web/src/ui/session.jsx  sessão (começar, aberta, encerrar)
+ ├─ web/src/ui/climb.jsx    novo boulder (detector), detalhe, projeto, compartilhar, link recebido
+ ├─ web/src/ui/photo.jsx    foto: pinça, arrasto, toque longo, pincel, caixas das agarras, ‹ ›
+ ├─ web/src/ui/social.jsx   perfil, amigos, ranking, seguidores, Home (feed)
+ ├─ web/src/ui/history.jsx  histórico e evolução
+ ├─ web/src/ui/game.jsx     sequência, trilha, conquistas, comemorações
+ ├─ web/src/ui/settings.jsx ajustes, tutorial, instalar, notificações, avaliação, excluir conta
+ ├─ web/src/core.js         sem tela: tema, Cognito, estado (state) e API, fotos, utilidades
+ ├─ web/src/session.js      sem tela: localização, encerramento automático, janela de baixo
+ ├─ web/src/game.js         dados da gamificação (ícones, formas, catálogo de conquistas)
  ├─ detect-worker.js      YOLOv8n fp16 (ONNX, onnxruntime-web 1.31, 1 thread) → caixas
  ├─ color.js / detect.js  cor (CIELAB/LCh, desconta parede e magnésio) e agrupamento da via
  ├─ guest.js              modo sem conta (mesmas rotas da API, respondidas localmente)
@@ -84,9 +89,14 @@ Cognito (plano Essentials): pool "boulder-log", senha forte (12+), sem MFA, auth
 do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-mail via SES (DKIM, MAIL FROM, DMARC).
 ```
 
-### Módulos do front
+### Front em React
 
-Cada módulo exporta o que declara e importa só o que usa. Variáveis que a inicialização troca (`guestMode`, `cfg`, os timers) só mudam por `setGuestMode`, `setCfg` e `clearTimers` em `core.js`, porque módulo ES só deixa quem declara reatribuir. `render`, `showAuth`, `needAccount` e `restoreScroll` ficam em `app.js` e são importados de volta (importação circular segura: só são chamados depois de tudo carregado).
+- **Estado:** um objeto `state` em `core.js` (ginásios, sessões, boulders, ajustes, perfil). As telas leem com `useStore()`; quem altera chama `emit()` (ou `render()`, que também remonta a tela atual do zero, como antes da migração).
+- **Rotas:** `ui/shell.jsx` lê `location.hash` a cada `hashchange`. Sem hash, abre na Home (ou na Sessão, se houver sessão aberta ou sem conta).
+- **Janelas de baixo:** `openSheet(<Componente/>)` monta o componente dentro do `<dialog id="sheet">`; arrastar para baixo fecha (`sheetSwipe`).
+- **Foto:** `ui/photo.jsx` guarda o motor de gestos (pinça, arrasto, toque longo, pincel) num `useEffect`, lendo sempre as funções mais novas; o zoom fica num objeto `z` de quem usa, para sobreviver ao redesenho.
+- **Fotos com link vencido** (os links assinados valem 1 h): se uma imagem falha, `refreshPhotos()` busca os dados de novo e redesenha (no máximo 1x por minuto).
+- **Teste de fumaça** (fora do repo): um servidor falso + Chrome sem tela passando por todas as telas, sem conta e pelo fluxo da foto (detector, toque, toque longo, pinça, pincel, salvar, editar agarras, compartilhar). Foi o que validou a migração.
 
 ### Dados (DynamoDB, `pk`/`sk`)
 
