@@ -9,7 +9,7 @@ import { analyzePhoto, COLORS, sanitizeAi } from './ai.ts';
 // Mesmas contas de XP/nível/sequência do app (uma fonte só).
 import { distanceKm, isSend, level, streakWeeks, totalXp } from '../web/src/stats.js';
 import {
-  AI_DAILY_LIMIT, ALLOWED_ORIGIN, ddb, HttpError, ID_RE, json, log, newId, nowIso, parseBody, PHOTO_BUCKET, s3, TABLE,
+  AI_DAILY_LIMIT, ALLOWED_ORIGINS, ddb, HttpError, ID_RE, json, log, newId, nowIso, parseBody, PHOTO_BUCKET, s3, TABLE,
   type HttpEvent, type HttpResult,
 } from './common.ts';
 
@@ -602,7 +602,7 @@ export async function handler(event: HttpEvent): Promise<HttpResult> {
   const rid = event.requestContext.requestId;
   try {
     // CSRF: escrita só a partir do próprio site (o JWT já exige login; isto é defesa extra).
-    if (event.requestContext.http.method !== 'GET' && event.headers.origin !== ALLOWED_ORIGIN) throw new HttpError(403, 'ORIGIN');
+    if (event.requestContext.http.method !== 'GET' && !ALLOWED_ORIGINS.includes(event.headers.origin ?? '')) throw new HttpError(403, 'ORIGIN');
     const sub = event.requestContext.authorizer?.jwt?.claims?.sub;
     if (!sub) throw new HttpError(401, 'UNAUTHORIZED');
     return await route(event, sub);

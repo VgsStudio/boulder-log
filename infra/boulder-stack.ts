@@ -28,6 +28,8 @@ export interface BoulderStackProps extends StackProps {
   zoneName: string;
   hostedZoneId?: string;
   domainName: string;
+  /** Outros endereços do mesmo app (mesmo site, login e dados). */
+  aliasDomains: string[];
   cognitoDomainPrefix: string;
   aiModel: string;
   aiDailyLimit: number;
@@ -45,6 +47,8 @@ export class BoulderStack extends Stack {
   constructor(scope: Construct, id: string, props: BoulderStackProps) {
     super(scope, id, props);
     const origin = `https://${props.domainName}`;
+    const domains = [props.domainName, ...props.aliasDomains];
+    const allOrigins = domains.map((d) => `https://${d}`);
 
     // ---------- Dados ----------
     // Dados do usuário: nada de DESTROY aqui.
@@ -62,7 +66,7 @@ export class BoulderStack extends Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       removalPolicy: RemovalPolicy.RETAIN,
-      cors: [{ allowedOrigins: [origin], allowedMethods: [s3.HttpMethods.POST, s3.HttpMethods.GET], allowedHeaders: ['*'], maxAge: 3600 }],
+      cors: [{ allowedOrigins: allOrigins, allowedMethods: [s3.HttpMethods.POST, s3.HttpMethods.GET], allowedHeaders: ['*'], maxAge: 3600 }],
       lifecycleRules: [{ abortIncompleteMultipartUploadAfter: Duration.days(1) }],
     });
     const webBucket = new s3.Bucket(this, 'Web', {
@@ -86,7 +90,7 @@ export class BoulderStack extends Stack {
       environment: {
         TABLE_NAME: table.tableName,
         PHOTO_BUCKET: photos.bucketName,
-        ALLOWED_ORIGIN: origin,
+        ALLOWED_ORIGIN: allOrigins.join(','),
         AI_MODEL: props.aiModel,
         AI_DAILY_LIMIT: String(props.aiDailyLimit),
       },
@@ -151,8 +155,8 @@ export class BoulderStack extends Stack {
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
-        callbackUrls: [redirect],
-        logoutUrls: [redirect],
+        callbackUrls: allOrigins.map((o) => `${o}/`),
+        logoutUrls: allOrigins.map((o) => `${o}/`),
       },
       preventUserExistenceErrors: true,
       accessTokenValidity: Duration.hours(1),
@@ -216,7 +220,7 @@ export class BoulderStack extends Stack {
     for (const [p, method] of routes) httpApi.addRoutes({ path: p, methods: [method], integration, authorizer });
 
     // ---------- Site: CloudFront com S3 e a API na mesma origem ----------
-    const certificate = new acm.Certificate(this, 'Cert', { domainName: props.domainName, validation: acm.CertificateValidation.fromDns(zone) });
+    const certificate = new acm.Certificate(this, 'Cert', { domainName: props.domainName, subjectAlternativeNames: props.aliasDomains, validation: acm.CertificateValidation.fromDns(zone) });
     const cognitoDomain = `https://${props.cognitoDomainPrefix}.auth.${this.region}.amazoncognito.com`;
     const s3Hosts = `https://${photos.bucketName}.s3.amazonaws.com https://${photos.bucketName}.s3.${this.region}.amazonaws.com`;
     const csp = [
@@ -251,7 +255,7 @@ export class BoulderStack extends Stack {
       },
     });
     const distribution = new cloudfront.Distribution(this, 'Cdn', {
-      domainNames: [props.domainName],
+      domainNames: domains,
       certificate,
       defaultRootObject: 'index.html',
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
@@ -276,6 +280,11 @@ export class BoulderStack extends Stack {
     const alias = route53.RecordTarget.fromAlias(new r53targets.CloudFrontTarget(distribution));
     new route53.ARecord(this, 'AliasA', { zone, recordName: props.domainName, target: alias });
     new route53.AaaaRecord(this, 'AliasAAAA', { zone, recordName: props.domainName, target: alias });
+    for (const d of props.aliasDomains) {
+      const key = d.split('.')[0];
+      new route53.ARecord(this, `AliasA-${key}`, { zone, recordName: d, target: alias });
+      new route53.AaaaRecord(this, `AliasAAAA-${key}`, { zone, recordName: d, target: alias });
+    }
 
     // ---------- Publicação do site ----------
     // Assets com hash no nome: cache de 1 ano. Páginas e config: sempre revalidadas.

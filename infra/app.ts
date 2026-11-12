@@ -14,6 +14,7 @@ new BoulderStack(app, 'BoulderLog-App', {
   zoneName: e.ZONE_NAME || 'vsoller.com.br',
   hostedZoneId: e.HOSTED_ZONE_ID || undefined,
   domainName: e.APP_DOMAIN || 'boulder.vsoller.com.br',
+  aliasDomains: (e.APP_ALIASES ?? 'chalkmark.vsoller.com.br').split(',').filter(Boolean),
   cognitoDomainPrefix: e.COGNITO_DOMAIN_PREFIX || 'vgs-boulder-log',
   aiModel: e.AI_MODEL || 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   aiDailyLimit: Number(e.AI_DAILY_LIMIT || 20),

@@ -34,6 +34,8 @@ function setTheme(theme) {
 applyTheme();
 const view = $('#view');
 let cfg;
+/** Volta do login para o mesmo endereço em que a pessoa está (o app responde em mais de um domínio). */
+const redirectUri = () => `${location.origin}/`;
 const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, profile: null, loadedAt: 0 };
 let timers = [];
 
@@ -105,7 +107,7 @@ async function login(path = 'oauth2/authorize') {
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
   const url = new URL(`${cfg.cognitoDomain}/${path}`);
   Object.entries({
-    response_type: 'code', client_id: cfg.clientId, redirect_uri: cfg.redirectUri, scope: 'openid email',
+    response_type: 'code', client_id: cfg.clientId, redirect_uri: redirectUri(), scope: 'openid email',
     code_challenge_method: 'S256', code_challenge: challenge, lang: lang === 'pt' ? 'pt-BR' : 'en',
   }).forEach(([k, v]) => url.searchParams.set(k, v));
   location.assign(url);
@@ -115,7 +117,7 @@ function logout() {
   try { localStorage.removeItem(TOKENS); } catch {}
   const url = new URL(`${cfg.cognitoDomain}/logout`);
   url.searchParams.set('client_id', cfg.clientId);
-  url.searchParams.set('logout_uri', cfg.redirectUri);
+  url.searchParams.set('logout_uri', redirectUri());
   location.assign(url);
 }
 
@@ -133,7 +135,7 @@ async function idToken() {
   const code = new URLSearchParams(location.search).get('code');
   if (code) {
     history.replaceState({}, '', '/');
-    const tk = await tokenCall({ grant_type: 'authorization_code', code, redirect_uri: cfg.redirectUri, code_verifier: sessionStorage.getItem(VERIFIER) || '' });
+    const tk = await tokenCall({ grant_type: 'authorization_code', code, redirect_uri: redirectUri(), code_verifier: sessionStorage.getItem(VERIFIER) || '' });
     sessionStorage.removeItem(VERIFIER);
     if (tk) saveTokens(tk);
   }
