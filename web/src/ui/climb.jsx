@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, t } from '../i18n.js';
 import { boxLab, calibrate, COLORS, sampleLab, suggest } from '../color.js';
 import { detectHolds, growRegion, holdAt, routeHolds } from '../detect.js';
-import { playSent, playTick } from '../sound.js';
+import { playResult } from '../sound.js';
 import * as S from '../stats.js';
 import {
   PHOTO_TERMS_VERSION, HOLD_TYPES, WALL_ANGLES, STYLE_TAGS, RESULTS, $, state, toast, fail, sessionsText, colorName, grade,
@@ -108,7 +108,7 @@ function QuickLog({ s }) {
       state.climbs.push(climb);
       closeSheet();
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
-      celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: S.isSend(climb) });
+      celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result });
       render();
       if (guestMode) setTimeout(needAccount, 1600);
     } catch (err) { fail(err); setBusy(false); }
@@ -299,7 +299,7 @@ function NewClimbForm({ s }) {
       state.climbs.push(climb);
       const unlocked = S.newAchievements(before, S.achievements(state.sessions, state.climbs));
       const lvAfter = S.level(S.totalXp(state.climbs)).level;
-      setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: S.isSend(climb) }), 50);
+      setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result }), 50);
       location.replace(`#/climb/${climb.id}`); // sem voltar para o formulário
       if (guestMode) setTimeout(needAccount, 1600); // depois da comemoração
       // A foto sobe em segundo plano; depois dela, o estilo da via (IA). Nada disso segura a tela.
@@ -356,7 +356,7 @@ function NewClimbForm({ s }) {
           ? (
             <section>
               <Stage z={d.zoom} onTap={onTap} detecting={d.detect === 'loading'} paint={brush}
-                onLong={(x, y) => { if (d.route && cycleRole(d.route, x, y)) { playTick(); draw(); } }}>
+                onLong={(x, y) => { if (d.route && cycleRole(d.route, x, y)) draw(); }}>
                 <CanvasView canvas={d.canvas} />
                 <Overlay holds={d.route} all={d.boxes} />
                 {/* A bolinha do toque só enquanto não há via marcada (depois as caixas mostram tudo). */}
@@ -448,7 +448,7 @@ export function ClimbView({ id }) {
   const patchClimb = (fields) => {
     const prev = { ...climbOf(c.id) };
     upsert(state.climbs, { id: c.id, ...fields });
-    if (fields.result && S.isSend({ result: fields.result }) && !S.isSend(prev)) playSent();
+    if (fields.result && S.isSend({ result: fields.result }) && !S.isSend(prev)) playResult(fields.result);
     draw();
     api(`/climbs/${c.id}`, { method: 'PATCH', body: fields })
       .then((x) => { upsert(state.climbs, x); draw(); }, (err) => { upsert(state.climbs, prev); draw(); fail(err); });
@@ -473,7 +473,7 @@ export function ClimbView({ id }) {
     const temp = { ...body, id: `tmp${Date.now()}`, createdAt: new Date().toISOString() };
     state.climbs.push(temp);
     const lvAfter = S.level(S.totalXp(state.climbs)).level;
-    celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(temp), levelUp: lvAfter > lvBefore ? lvAfter : 0, sent: result === 'sent' });
+    celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(temp), levelUp: lvAfter > lvBefore ? lvAfter : 0, result });
     draw();
     try {
       const { climb } = await api('/climbs', { method: 'POST', body });
@@ -533,7 +533,6 @@ export function ClimbView({ id }) {
     if (!b) { b = growRegion(e.rgba, cv.width, cv.height, x, y); if (b) e.boxes?.push(b); }
     if (!b) return;
     if (!e.holds.includes(b)) e.holds.push(b);
-    playTick();
     draw();
   };
   const saveHolds = async () => {
@@ -590,7 +589,7 @@ export function ClimbView({ id }) {
           <section className="stack">
             {e.canvas && (
               <Stage z={e.zoom} onTap={tapHold} detecting={e.status === 'loading'}
-                onLong={(x, y) => { if (cycleRole(e.holds, x, y)) { playTick(); draw(); } }}
+                onLong={(x, y) => { if (cycleRole(e.holds, x, y)) draw(); }}
                 paint={e.paint ? holdBrush({
                   boxes: () => e.boxes ?? [], aspect: () => e.canvas.width / e.canvas.height,
                   isIn: (b) => e.holds.some(sameHold(b)),
@@ -733,8 +732,7 @@ export function ShareView({ token }) {
     try {
       const climb = await api(`/shares/${token}/accept`, { method: 'POST' });
       state.climbs.push(climb);
-      playTick();
-      toast(t('share.added'));
+        toast(t('share.added'));
       location.replace(`#/climb/${climb.id}`);
       if (sh.owner && !sh.owner.following) setTimeout(() => followSharer(sh.owner), 900);
     } catch (e) { fail(e); setBusy(false); }

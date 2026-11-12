@@ -1,7 +1,7 @@
 // Gamificação em React: ícones, agarras, cartão da sequência, trilha de graus, conquistas.
 import { useId } from 'react';
 import { fmtDate, fmtDuration, lang, t } from '../i18n.js';
-import { playFanfare, playSent, playTick } from '../sound.js';
+import { playResult } from '../sound.js';
 import * as S from '../stats.js';
 import { state, grade, gymOf, toast } from '../core.js';
 import { openSheet } from '../session.js';
@@ -144,9 +144,9 @@ export function streakSheet() {
 }
 
 /** Comemoração: recorde de grau e subida de nível ganham destaque; conquistas em lista. */
-export function celebrate({ unlocked, xp, levelUp, sent = false }) {
-  if (!unlocked.length && !levelUp) { (sent ? playSent : playTick)(); toast(t('xp.gain', { n: xp })); return; }
-  playFanfare();
+export function celebrate({ unlocked, xp, levelUp, result }) {
+  playResult(result);
+  if (!unlocked.length && !levelUp) { toast(t('xp.gain', { n: xp })); return; }
   const pr = unlocked.filter((a) => a.id.startsWith('grade:')).map((a) => Number(a.id.split(':')[1])).sort((a, b) => b - a)[0];
   const best = Math.max(...state.climbs.filter(S.isSend).map((c) => c.grade));
   const isPr = pr != null && pr >= best;
@@ -167,7 +167,6 @@ export function celebrate({ unlocked, xp, levelUp, sent = false }) {
 
 /** Resumo ao encerrar a sessão. */
 export function recapSheet(s, unlocked) {
-  playFanfare();
   const cs = state.climbs.filter((c) => c.sessionId === s.id);
   const sum = S.sessionSummaries([s], state.climbs)[0];
   const flashes = cs.filter((c) => c.result === 'flash').length;

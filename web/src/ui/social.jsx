@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate, lang, t } from '../i18n.js';
 import { SWATCH } from '../color.js';
-import { playTick } from '../sound.js';
 import * as S from '../stats.js';
 import { $, state, toast, fail, colorName, grade, loadTokens, guestMode, api, publicApi, toCanvas, compress, upload, debounce } from '../core.js';
 import { restoreScroll, render, needAccount, showAuth } from '../app.js';
@@ -108,7 +107,6 @@ export async function pinClimb(c) {
   try {
     Object.assign(state.profile, { pinned: (await api('/profile', { method: 'PUT', body: { pinned } })).pinned });
     toast(pinned ? t('pin.added') : t('pin.removed'));
-    if (pinned) playTick();
     render();
   } catch (err) { fail(err); }
 }
@@ -119,7 +117,6 @@ export async function toggleFollow(p) {
   if (!(await needProfile())) return false;
   const on = !p.following;
   p.following = on;
-  if (on) playTick();
   try { Object.assign(p, await api(`/users/${p.handle}/follow`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { p.following = !on; fail(err); }
   return true;
 }
@@ -413,7 +410,6 @@ export function TryButton({ u, c }) {
     try {
       const climb = await api(`/users/${u.handle}/climbs/${c.id}/copy`, { method: 'POST' });
       state.climbs.push(climb);
-      playTick();
       toast(t('share.added'));
       if ($('#sheet').open) closeSheet();
       location.hash = `#/climb/${climb.id}`;
@@ -483,8 +479,7 @@ function FireButton({ c }) {
     const on = !c.fired;
     Object.assign(c, { fired: on, fire: c.fire + (on ? 1 : -1) });
     redraw((n) => n + 1);
-    if (on) playTick();
-    try { Object.assign(c, await api(`/feed/${c.owner.handle}/${c.id}/fire`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { fail(err); }
+      try { Object.assign(c, await api(`/feed/${c.owner.handle}/${c.id}/fire`, { method: on ? 'POST' : 'DELETE' })); } catch (err) { fail(err); }
     redraw((n) => n + 1);
   };
   return <button className={`btn small-btn fire-btn ${c.fired ? 'on' : ''}`} type="button" aria-pressed={String(!!c.fired)} onClick={click}>🔥<span>{c.fire ? ` ${c.fire}` : ''}</span></button>;

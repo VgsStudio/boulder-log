@@ -1,7 +1,7 @@
 // Ajustes, tutorial, instalar na tela inicial, notificações e avaliação, em React.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, lang, langChoice, setLang, t } from '../i18n.js';
-import { playSent, playTick, setSound, soundOn } from '../sound.js';
+import { playResult, setSound, soundOn } from '../sound.js';
 import * as S from '../stats.js';
 import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce } from '../core.js';
 import { render, showAuth } from '../app.js';
@@ -55,7 +55,7 @@ function Settings() {
         </label>
         <Field label={t('settings.lang')}><Seg options={[['auto', t('settings.langAuto')], ['pt', 'Português'], ['en', 'English']]} value={langChoice()} onPick={(v) => setLang(v)} /></Field>
         <Field label={t('settings.theme')}><Seg options={[['auto', t('settings.themeAuto')], ['light', t('settings.themeLight')], ['dark', t('settings.themeDark')]]} value={getTheme()} onPick={(v) => { setTheme(v); redraw((n) => n + 1); }} /></Field>
-        <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playSent(); redraw((n) => n + 1); }} /></Field>
+        <Field label={t('settings.sound')}><Seg options={[['on', t('settings.soundOn')], ['off', t('settings.soundOff')]]} value={soundOn() ? 'on' : 'off'} onPick={(v) => { setSound(v === 'on'); if (v === 'on') playResult('sent'); redraw((n) => n + 1); }} /></Field>
       </section>
 
       {!guestMode && <section className="settings-group"><h3>{t('push.settings')}</h3><PushSettings /></section>}
@@ -232,7 +232,7 @@ function PushAsk() {
     try {
       const p = await enablePush();
       closeSheet();
-      if (p) { playTick(); toast(t('push.on', { h: `${p.effectiveHour}h` })); } else toast(t('push.blocked'));
+      if (p) { toast(t('push.on', { h: `${p.effectiveHour}h` })); } else toast(t('push.blocked'));
     } catch (err) { fail(err); setBusy(false); }
   };
   return (
@@ -316,7 +316,6 @@ function Feedback({ auto, rated }) {
       await api('/feedback', { method: 'POST', body: { stars, comment: comment.trim(), lang } });
       fbLater(60);
       closeSheet();
-      playSent();
       toast(t('fb.thanks'));
     } catch (err) { fail(err); setBusy(false); }
   };
@@ -327,7 +326,7 @@ function Feedback({ auto, rated }) {
       <div className="stars" role="radiogroup" aria-label={t('fb.title')}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button key={n} type="button" role="radio" aria-checked={String(stars === n)} aria-label={t('fb.star', { n })} className={n <= stars ? 'on' : undefined}
-            onClick={() => { rated.stars = n; setStars(n); playTick(); }}>
+            onClick={() => { rated.stars = n; setStars(n); }}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d={STAR} /></svg>
           </button>
         ))}
