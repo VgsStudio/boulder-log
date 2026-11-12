@@ -177,7 +177,7 @@ export class BoulderStack extends Stack {
         clientId: SecretValue.secretsManager('chalkmark/google-oauth', { jsonField: 'clientId' }).unsafeUnwrap(),
         clientSecretValue: SecretValue.secretsManager('chalkmark/google-oauth', { jsonField: 'clientSecret' }),
         scopes: ['openid', 'email', 'profile'],
-        attributeMapping: { email: cognito.ProviderAttribute.GOOGLE_EMAIL, emailVerified: cognito.ProviderAttribute.other('email_verified') },
+        attributeMapping: { email: cognito.ProviderAttribute.GOOGLE_EMAIL, emailVerified: cognito.ProviderAttribute.other('email_verified'), fullname: cognito.ProviderAttribute.GOOGLE_NAME },
       })
       : undefined;
     const redirect = `${origin}/`;

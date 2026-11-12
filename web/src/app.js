@@ -1271,10 +1271,24 @@ function avatar(p, size = 40) {
 const mondayIso = () => new Date(`${S.weekStart(new Date().toISOString())}T00:00:00`).toISOString();
 
 /** Criar ou editar o perfil (nome, @, foto). Resolve com o perfil salvo, ou null se cancelar. */
-function profileSheet() {
+/** Dados do login (id token): e-mail e, no Google, o nome. */
+function claims() {
+  try { return JSON.parse(atob(loadTokens().id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch { return {}; }
+}
+/** Sugestão de nome e @ para quem ainda não tem perfil. */
+function profileSuggestion() {
+  const c = claims();
+  const local = (c.email ?? '').split('@')[0];
+  const handle = local.toLowerCase().normalize('NFD').replace(/[^a-z0-9_.]/g, '').slice(0, 20).padEnd(3, '0');
+  const name = c.name || local.replace(/[._\d]+/g, ' ').trim().replace(/\w/g, (x) => x.toUpperCase()) || '';
+  return { name: name.slice(0, 40), handle };
+}
+
+function profileSheet({ welcome = false } = {}) {
   return new Promise((resolve) => {
     const cur = state.profile;
-    const f = { name: cur?.name ?? '', handle: cur?.handle ?? '', file: null, preview: cur?.avatarUrl ?? null, error: '' };
+    const sug = cur ? {} : profileSuggestion();
+    const f = { name: cur?.name ?? sug.name ?? '', handle: cur?.handle ?? sug.handle ?? '', file: null, preview: cur?.avatarUrl ?? null, error: '' };
     const box = h('form', { class: 'stack' });
     const save = async (e) => {
       e.preventDefault();
@@ -1297,8 +1311,8 @@ function profileSheet() {
       }
     };
     const draw = () => fill(box,
-      h('h2', {}, cur ? t('profile.edit') : t('profile.create')),
-      !cur && h('p', { class: 'muted' }, t('profile.lead')),
+      h('h2', {}, cur ? t('profile.edit') : welcome ? t('profile.welcome') : t('profile.create')),
+      !cur && h('p', { class: 'muted' }, welcome ? t('profile.welcomeLead') : t('profile.lead')),
       h('label', { class: 'row avatar-pick' },
         avatar({ ...cur, name: f.name, handle: f.handle, avatarUrl: f.preview }, 64),
         h('span', { class: 'link' }, t('profile.photo')),
@@ -1999,6 +2013,13 @@ async function boot() {
   });
   render();
   checkAutoEnd();
+  // Primeira vez (sem perfil): boas-vindas com nome e @ já sugeridos; "agora não" pergunta de novo amanhã.
+  try {
+    if (!state.profile && Date.now() - Number(localStorage.getItem('cm:onb') || 0) > 86400_000) {
+      localStorage.setItem('cm:onb', String(Date.now()));
+      setTimeout(() => { if (!$('#sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); }, 600);
+    }
+  } catch {}
   setTimeout(maybeAskFeedback, 4000);
   setInterval(checkAutoEnd, 5 * 60_000);
 }
