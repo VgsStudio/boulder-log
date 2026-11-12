@@ -5,7 +5,7 @@ import * as S from '../stats.js';
 import { $, state, fail, grade, api, activeSession, gymOf, upsert } from '../core.js';
 import { render } from '../app.js';
 import { getPos, geoGranted, openSheet } from '../session.js';
-import { quickLogSheet } from '../climb.js';
+import { quickLogSheet } from './climb.jsx';
 import { useStore, Seg, ClimbRow } from './base.jsx';
 import { Hero, Icon, recapSheet } from './game.jsx';
 import { GoalsCard, SessionHeader } from './history.jsx';

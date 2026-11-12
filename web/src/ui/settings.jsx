@@ -3,11 +3,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fmtDate, lang, langChoice, setLang, t } from '../i18n.js';
 import { playSent, playTick, setSound, soundOn } from '../sound.js';
 import * as S from '../stats.js';
-import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession } from '../core.js';
+import { $, getTheme, setTheme, state, toast, fail, logout, guestMode, api, activeSession, debounce } from '../core.js';
 import { render, showAuth } from '../app.js';
 import { SHARE_ICON } from '../game.js';
 import { openSheet } from '../session.js';
-import { debounce } from '../climb.js';
 import { mount, Seg, Stepper } from './base.jsx';
 import { LineIcon } from './game.jsx';
 

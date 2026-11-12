@@ -5,22 +5,22 @@ import { History, Progress } from './ui/history.jsx';
 import './style.css';
 import { t } from './i18n.js';
 import { bumpNags, clearGuest, getPhoto, guestLocked, guestNags, guestPending, startGuest } from './guest.js';
-import { PHOTO_TERMS_VERSION, $, view, cfg, state, timers, h, fill, svg, toast, fail, seg, saveTokens, cognitoApi, fromAuthResult, login, idToken, guestMode, api, loadAll, loadSnapshot, activeSession, upload, setCfg, setGuestMode, clearTimers, emit } from './core.js';
+import { PHOTO_TERMS_VERSION, $, view, cfg, state, timers, h, fill, svg, toast, fail, seg, saveTokens, cognitoApi, fromAuthResult, login, idToken, guestMode, api, loadAll, loadSnapshot, activeSession, upload, setCfg, setGuestMode, clearTimers, emit, debounce } from './core.js';
 import { icon, streakPill } from './game.js';
 import { streakSheet } from './ui/game.jsx';
 import { Session } from './ui/session.jsx';
 import { checkAutoEnd, openSheet, sheetSwipe } from './session.js';
-import { onCameraPhoto, viewNew, viewClimb, debounce, viewShare, backfillPreviews } from './climb.js';
+import { onCameraPhoto, NewClimb, ClimbView, ShareView, backfillPreviews } from './ui/climb.jsx';
 import { profileSheet, Friends, Me, User, feed, Feed } from './ui/social.jsx';
 import { settingsSheet, tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './ui/settings.jsx';
 
 // ---------- roteamento ----------
 const ROUTES = [
   [/^#?\/?$/, () => mount(createElement(Session)), 'session'],
-  [/^#\/new$/, viewNew, 'session'],
-  [/^#\/climb\/([a-z0-9]{19})$/, viewClimb, null],
+  [/^#\/new$/, () => mount(createElement(NewClimb)), 'session'],
+  [/^#\/climb\/([a-z0-9]{19})$/, (id) => mount(createElement(ClimbView, { id, key: id })), null],
   [/^#\/history$/, () => mount(createElement(History)), 'history'],
-  [/^#\/s\/([A-Za-z0-9_-]{22})$/, viewShare, null],
+  [/^#\/s\/([A-Za-z0-9_-]{22})$/, (token) => mount(createElement(ShareView, { token })), null],
   [/^#\/progress$/, () => mount(createElement(Progress)), 'profile'],
   [/^#\/feed$/, () => mount(createElement(Feed)), 'feed'],
   [/^#\/me$/, () => mount(createElement(Me)), 'profile'],

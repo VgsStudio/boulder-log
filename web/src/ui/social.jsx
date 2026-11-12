@@ -4,12 +4,13 @@ import { fmtDate, lang, t } from '../i18n.js';
 import { SWATCH } from '../color.js';
 import { playTick } from '../sound.js';
 import * as S from '../stats.js';
-import { $, state, toast, fail, colorName, grade, loadTokens, guestMode, api, publicApi, toCanvas, compress, upload } from '../core.js';
+import { $, state, toast, fail, colorName, grade, loadTokens, guestMode, api, publicApi, toCanvas, compress, upload, debounce } from '../core.js';
 import { restoreScroll, render, needAccount, showAuth } from '../app.js';
 import { SHARE_ICON, HOLD_COLORS } from '../game.js';
 import { openSheet } from '../session.js';
-import { debounce, setNav, withNav, climbStage } from '../climb.js';
-import { useStore, useRedraw, Dom, Seg, Swatch, FadeImg, lqipBg } from './base.jsx';
+import { setNav } from './climb.jsx';
+import { ClimbStage, WithNav } from './photo.jsx';
+import { useStore, useRedraw, Seg, Swatch, FadeImg, lqipBg } from './base.jsx';
 import { Icon, LineIcon } from './game.jsx';
 
 const closeSheet = () => $('#sheet').close();
@@ -279,8 +280,6 @@ export const STATUS_FILTERS = ['all', 'sent', 'project', 'dropped'];
 const profileUi = { filter: 'all' };
 export const userCache = new Map(); // perfis já abertos (as URLs das fotos valem 1 h; a volta recarrega por trás)
 
-/** Foto de boulder com as agarras (ainda vem do código antigo da tela de boulder). */
-const Stage = ({ c, url, onOpen }) => <Dom make={() => climbStage(url, c, onOpen)} deps={[c.id, url]} />;
 
 export function User({ handle, isTab = false }) {
   const [u, setU] = useState(() => userCache.get(handle) ?? null);
@@ -349,7 +348,7 @@ export function User({ handle, isTab = false }) {
               <Swatch c={u.pinned.color} /><strong>{colorName(u.pinned.color)}</strong><span className="grade-pill">{grade(u.pinned.grade)}</span>
               <span className="grow" /><span className={`badge ${u.pinned.sent ? 'sent' : 'project'}`}>{u.pinned.sent ? t('pin.sent') : t('result.project')}</span><span className="muted">›</span>
             </button>
-            {u.pinned.photoUrl && <Stage c={u.pinned} url={u.pinned.photoUrl} onOpen={() => openPinned(u)} />}
+            {u.pinned.photoUrl && <ClimbStage c={u.pinned} url={u.pinned.photoUrl} onOpen={() => openPinned(u)} />}
             {u.pinned.tries > 1 && <p className="muted small">{t('pin.tries', { n: u.pinned.tries })}</p>}
             {!u.me && u.friends && <TryButton u={u} c={u.pinned} />}
           </>
@@ -430,7 +429,7 @@ export function friendClimbSheet(u, c, list = [c]) {
   openSheet(
     <div className="stack">
       <h2 className="row"><Swatch c={c.color} />{colorName(c.color)}<span className="grade-pill">{grade(c.grade)}</span><span className="grow" /><span className={`badge ${c.result}`}>{t(`result.${c.result}`)}</span></h2>
-      {c.photoUrl && <Dom make={() => withNav(climbStage(c.photoUrl, c), i > 0, i < list.length - 1, go)} deps={[c.id]} />}
+      {c.photoUrl && <WithNav hasPrev={i > 0} hasNext={i < list.length - 1} go={go}><ClimbStage key={c.id} url={c.photoUrl} c={c} /></WithNav>}
       <p className="muted small">{fmtDate(c.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })}</p>
       {!u.me && <TryButton u={u} c={c} />}
       <button className="btn ghost block" type="button" onClick={closeSheet}>{t('settings.close')}</button>
@@ -505,7 +504,7 @@ function FeedCard({ c }) {
         <span className={`badge ${c.result}`}>{t(`result.${c.result}`)}</span>
       </div>
       {c.photoUrl
-        ? <Stage c={c} url={c.photoUrl} onOpen={open} />
+        ? <ClimbStage c={c} url={c.photoUrl} onOpen={open} />
         : <div className="feed-color" style={{ background: SWATCH[c.color] ?? 'var(--surface-2)' }}><span>{grade(c.grade)}</span></div>}
       <div className="row feed-actions">
         <FireButton c={c} /><span className="grow" />

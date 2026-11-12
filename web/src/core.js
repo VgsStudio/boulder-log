@@ -91,6 +91,11 @@ export const fail = (e) => {
   toast(e?.code === 'AI_DAILY_LIMIT' ? t('ai.limit') : e?.code === 'AI_UNAVAILABLE' || e?.code === 'AI_FAILED' ? t('ai.unavailable') : navigator.onLine ? t('error.generic') : t('error.offline'));
 };
 
+export const capitalize = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+export function debounce(fn, ms) {
+  let tm;
+  return (...a) => { clearTimeout(tm); tm = setTimeout(() => fn(...a), ms); };
+}
 export const sessionsText = (n) => (n === 1 ? t('unit.session1') : t('unit.sessions', { n }));
 export const colorName = (c) => t(`color.${c}`);
 export const grade = (g) => S.gradeLabel(g, state.settings.scale);

@@ -2,8 +2,8 @@
 import { fmtDate, fmtDuration, fmtPct, lang, t } from '../i18n.js';
 import { COLORS } from '../color.js';
 import * as S from '../stats.js';
-import { RESULTS, state, gymOf, colorName, grade, sessionsText } from '../core.js';
-import { capitalize, setNav } from '../climb.js';
+import { RESULTS, state, gymOf, colorName, grade, sessionsText, capitalize } from '../core.js';
+import { setNav } from './climb.jsx';
 import { settingsSheet } from './settings.jsx';
 import { useStore, useRedraw, Seg, Swatch, Bar, ClimbRow, FadeImg, lqipBg } from './base.jsx';
 import { Hero, GradePathCard, AchievementsCard } from './game.jsx';
