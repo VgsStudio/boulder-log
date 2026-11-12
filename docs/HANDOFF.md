@@ -21,20 +21,21 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 
 | Área | O que faz |
 |---|---|
-| **Abas** | Sessão · Histórico · **📷 (centro)** · Feed · Perfil. A Evolução fica dentro do Perfil (`#/progress`). |
+| **Abas** | Só ícones (o nome fica no `aria-label`, via `data-aria`): **Home** (casinha, `#/feed`) · Sessão (`#/`, continua sendo a tela inicial) · **📷 (centro)** · Histórico · Perfil. A aba ativa ganha um risco de giz. A Evolução fica dentro do Perfil (`#/progress`). |
 | **Câmera** (centro da barra) | Foto → novo boulder direto. Sem sessão aberta, abre uma no último ginásio usado. |
 | **Registro rápido** | Na sessão: cor + grau + resultado numa janela, sem foto. |
 | **Sessão** | Começa no ginásio (reconhecido por GPS, até 500 m). Registra boulders e encerra com sensação/nota. **Encerra sozinha**: >1 km do ginásio (com o app aberto, a cada 5 min) ou 4 h sem registro. |
 | **Registrar boulder** | Foto → detector acha as agarras (Web Worker, não trava a tela) → toque numa agarra = cor + via sugerida. Toque inclui/tira agarra; **segurar** = início (verde) → topo (vermelha) → normal; **pincel** 🖌 = arrastar o dedo marca/desmarca várias. Enquanto procura, a foto fica cinza com uma varredura. Pinça amplia só a foto. Cor, grau (V ou Font) e resultado (Flash/Mandou/Projeto). Ao continuar um projeto, o resultado é obrigatório. |
-| **Boulder salvo** | Editar cor/grau, **editar agarras** (o detector roda de novo), fixar no perfil (alfinete), compartilhar link, excluir (o projeto inteiro, se for a raiz). Navega com **‹ ›** e arrastando para o lado. Foto abre pela miniatura e troca pela grande. |
+| **Boulder salvo** | Editar cor/grau, **editar agarras** (o detector roda de novo), fixar no perfil (alfinete), compartilhar link, excluir (o projeto inteiro, se for a raiz). Navega com **‹ ›** e arrastando para o lado. A foto aparece em 3 camadas: prévia borrada na hora → miniatura → foto grande (as duas carregam em paralelo). |
 | **Projetos** | "Mandei!" / "Tentei de novo" / "A via saiu / desisti". Contador de tentativas não existe (decisão: ninguém atualiza). |
 | **Gamificação** | XP por via (grau, flash), nível, sequência semanal (o foguinho explica ao tocar), metas (sessões/semana, grau), trilha de graus (5 mandadas = domina), conquistas, sons e vibração. |
 | **Evolução** | Gráficos semanais, pirâmide, KPIs, card "Onde você manda e onde trava" (estilo da IA; avisa quando há menos de 15 boulders analisados). |
 | **Histórico** | Calendário, sessões (o mais recente em cima) e galeria filtrável. |
-| **Perfil** (aba da direita) | Nome, @, foto, nível, seguidores. **Amigos** ficam dentro (ranking da semana, busca, "talvez você conheça"). Boulder fixado. Galeria com etiqueta **Mandado/Flash/Projeto/Desistido** e filtros. Compartilhar perfil. Volta para a mesma posição da página. |
+| **Perfil** (aba da direita) | Nome, @, foto, nível. **Seguidores / seguindo** abrem a lista de pessoas (como no Instagram), com botão de seguir; no próprio perfil e no de amigos (para os outros, só os números). **Amigos** ficam dentro (ranking da semana, busca, "talvez você conheça"). Boulder fixado. Galeria com etiqueta **Mandado/Flash/Projeto/Desistido** e filtros. Compartilhar perfil. Volta para a mesma posição da página. |
 | **Social** | Seguir sem aprovação. **Amigo = os dois se seguem**. Histórico, fotos e XP só para amigos; o cartão público (nome, @, nível, fixado) é visível para qualquer pessoa com o link, até sem conta. "Quero tentar" copia o boulder de um amigo para os seus projetos. |
 | **Compartilhar boulder** | Ícone no topo do boulder. Link `#/s/<token>` (90 dias) com foto, agarras, cor, grau e **nome do ginásio**. Quem recebe adiciona uma **cópia** aos próprios projetos (editar uma não muda a outra). Dá para **desativar os links** de um boulder; excluir o boulder também desativa. |
-| **Feed** | Boulders mandados e projetos novos dos **amigos** (mútuos), rolagem infinita, **🔥** (com notificação ao dono), "Quero tentar", pessoas para seguir intercaladas e cartões de **Exemplo** quando vazio. |
+| **Fotos rápidas** | Ao salvar, o app gera uma **prévia de 24 px** (`lqip`, data URL de ~1 KB) que vai junto do boulder. Galerias mostram quadrados escuros pulsando → prévia borrada → miniatura com esmaecer, carregando só o que aparece na rolagem (`loading=lazy`). Boulders antigos ganham a prévia sozinhos (até 30 por abertura, 5 s depois de abrir: baixa a miniatura e grava com PATCH). |
+| **Home** (ex-Feed) | Boulders mandados e projetos novos dos **amigos** (mútuos), rolagem infinita, **🔥** (com notificação ao dono), "Quero tentar", pessoas para seguir intercaladas e cartões de **Exemplo** quando vazio. |
 | **Bloquear** | No perfil da pessoa: desfaz o seguir dos dois lados, impede seguir de novo e tira a pessoa de sugestões e busca. |
 | **Notificações** | Web Push (no iPhone, só com o app na tela inicial). **Lembrete diário personalizado** ("Vitor, …") 1 h antes do horário em que a pessoa costuma começar as sessões (aprendido; pode fixar em Ajustes). A mensagem depende da situação: sequência em risco no fim de semana, projeto esperando, meta da semana, semana em branco ou "semana garantida". Não envia se a pessoa já escalou no dia. Também avisa novo seguidor e 🔥. Ajustes: liga/desliga, horário e "enviar teste". |
 | **App instalado / offline** | O service worker (`web/sw.js`) guarda o app e uma cópia dos dados: sem sinal, abre com aviso. Convite para instalar na tela inicial (passo a passo no iPhone, botão no Android). |
@@ -79,7 +80,7 @@ do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-
 |---|---|---|
 | `USER#<sub>` | `GYM#<id>` | ginásio (nome, paleta calibrada, `loc` gravada uma vez) |
 | `USER#<sub>` | `SESSION#<id>` | sessão (`startedAt`, `endedAt`, sensação, nota, `autoEnded`) |
-| `USER#<sub>` | `CLIMB#<id>` | boulder: cor, grau, resultado, `holds` (com `role`), `cands`, `autoHolds`, `detector`, `tap`, `projectId`, `dropped`, `ai`, `photoType`, `sharedFrom/sharedBy`, `gymName` (em cópias) |
+| `USER#<sub>` | `CLIMB#<id>` | boulder: cor, grau, resultado, `holds` (com `role`), `cands`, `lqip` (prévia ≤3 KB, só `data:image/webp|jpeg`), `autoHolds`, `detector`, `tap`, `projectId`, `dropped`, `ai`, `photoType`, `sharedFrom/sharedBy`, `gymName` (em cópias) |
 | `USER#<sub>` | `SETTINGS` | escala, metas, aceite do termo das fotos |
 | `USER#<sub>` | `PROFILE` | nome, @, `avatarType`, `pinned`, `search` |
 | `USER#<sub>` | `FOLLOWS#<sub>` / `FOLLOWER#<sub>` | laços de seguir (gravados em transação) |
@@ -101,7 +102,7 @@ Os ids (`newId`) são ordenáveis pelo tempo (base36 dos ms), e é isso que perm
 ### Principais rotas
 
 `/api/gyms`, `/api/sessions`, `/api/climbs` (+`/media`, `/analyze`, `/share`), `/api/settings`,
-`/api/profile`, `/api/users` (busca), `/api/users/{handle}` (+`/follow`, `/climbs/{id}/copy`), `/api/social`
+`/api/profile`, `/api/users` (busca), `/api/users/{handle}` (+`/follow`, `/people?type=followers|following`, `/climbs/{id}/copy`), `/api/social`
 (ranking + sugestões), `/api/shares/{id}` (+`/accept`), `/api/feedback`, `DELETE /api/account`,
 `/api/feed` (+`/{handle}/{id}/fire`), `/api/users/{handle}/block`, `DELETE /api/climbs/{id}/share`,
 `/api/push/key|subscribe|unsubscribe|prefs|test`,
@@ -193,11 +194,12 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 - e-mail de código pelo SES no cadastro real;
 - zoom, toque longo e edição de agarras;
 - encerramento automático da sessão;
-- seguir, ranking e perfil com amigos reais.
+- seguir, ranking e perfil com amigos reais;
+- lista de seguidores/seguindo e a prévia borrada das fotos (iPhone salva a prévia em JPEG, o Safari não gera WebP).
 
 ### Combinado e ainda não feito
 
-- **Testar notificações num iPhone real** (o servidor e o agendamento foram testados; a entrega no aparelho só com o dono).
+- ~~Testar notificações num iPhone real~~: **funcionou** (12/11: chegou "👋 Jeniffer começou a te seguir"). Falta ver o lembrete diário chegar.
 - **Usar os adesivos do ginásio** (duas bolinhas na saída, plaquinha do grau) para separar duas vias da mesma cor. A regra do ginásio não foi confirmada.
 - **Verificação de branding no Google** (domínio no Search Console via TXT no Route 53), para mostrar "Chalkmark" na tela do Google.
 - **Tirar o nome antigo do repositório da confiança OIDC.**
