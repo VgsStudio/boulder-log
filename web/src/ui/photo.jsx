@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t } from '../i18n.js';
 import { holdAt } from '../detect.js';
 import { NS } from '../core.js';
+import { refreshPhotos } from './base.jsx';
 
 /** Quadro da foto com pinça para ampliar só a foto (não a página) e arrastar quando ampliada.
  *  Toque curto sem mexer = onTap(x, y) em coordenadas 0-1 da foto, já descontando o zoom.
@@ -161,7 +162,7 @@ export function PhotoImg({ full, thumb }) {
     pre.src = full;
     return () => { pre.onload = null; };
   }, [full, thumb]);
-  return <img src={src} alt="" decoding="async" className={`fade ${loaded ? 'in' : ''}`} onLoad={() => setLoaded(true)} onError={() => { if (src !== full && full) setSrc(full); }} />;
+  return <img src={src} alt="" decoding="async" className={`fade ${loaded ? 'in' : ''}`} onLoad={() => setLoaded(true)} onError={() => { if (src !== full && full) setSrc(full); else refreshPhotos(); }} />;
 }
 
 /** Foto de um boulder com as agarras da via marcadas. */

@@ -1,9 +1,10 @@
 // Base do React: montar telas, estado compartilhado e componentes pequenos usados em todo lugar.
-import { isValidElement, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { isValidElement, useEffect, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { fmtDate, t } from '../i18n.js';
 import { SWATCH } from '../color.js';
-import { state, subscribe, getVersion, colorName, grade, rootOf } from '../core.js';
+import { state, subscribe, getVersion, colorName, grade, rootOf, loadAll } from '../core.js';
+import { render } from '../app.js';
 
 // ---------- montar ----------
 const roots = new Map(); // contêiner -> root
@@ -27,17 +28,6 @@ export const useStore = () => { useSyncExternalStore(subscribe, getVersion); ret
 
 /** Força redesenho local (para objetos mutáveis guardados fora do React). */
 export const useRedraw = () => { const [, set] = useState(0); return () => set((n) => n + 1); };
-
-/** Ponte temporária: põe um elemento DOM antigo dentro do React. */
-export function Dom({ make, deps = [] }) {
-  const ref = useRef(null);
-  useLayoutEffect(() => {
-    const node = make();
-    const list = (Array.isArray(node) ? node.flat(Infinity) : [node]).filter((n) => n != null && n !== false);
-    ref.current.replaceChildren(...list);
-  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
-  return <span className="rx" ref={ref} />;
-}
 
 // ---------- componentes ----------
 export const Swatch = ({ c }) => <span className={`swatch ${c === 'other' ? 'other' : ''}`} style={c === 'other' ? undefined : { background: SWATCH[c] }} />;
@@ -87,9 +77,19 @@ export function ClimbRow({ c, meta, onClick }) {
 /** Prévia borrada (lqip) como fundo de um quadro de foto. */
 export const lqipBg = (c) => (c?.lqip ? { backgroundImage: `url("${c.lqip}")` } : undefined);
 
-/** Miniatura com esmaecer ao carregar; some se der erro. */
+/** Foto que não carregou: o link assinado (vale 1 h) provavelmente venceu. Busca os dados de novo
+ *  (links novos) e redesenha; no máximo uma vez por minuto. */
+let lastRefresh = 0;
+export function refreshPhotos() {
+  if (Date.now() - lastRefresh < 60_000 || !navigator.onLine) return;
+  lastRefresh = Date.now();
+  loadAll().then(() => render(), () => {});
+}
+
+/** Miniatura com esmaecer ao carregar; se falhar, renova os links e tenta de novo. */
 export function FadeImg({ src, alt = '', ...rest }) {
-  const [state_, set] = useState('loading');
-  if (state_ === 'error') return null;
-  return <img src={src} alt={alt} loading="lazy" decoding="async" className={`fade ${state_ === 'in' ? 'in' : ''}`} onLoad={() => set('in')} onError={() => set('error')} {...rest} />;
+  const [st, set] = useState('loading');
+  useEffect(() => { set('loading'); }, [src]);
+  if (st === 'error') return null;
+  return <img src={src} alt={alt} loading="lazy" decoding="async" className={`fade ${st === 'in' ? 'in' : ''}`} onLoad={() => set('in')} onError={() => { set('error'); refreshPhotos(); }} {...rest} />;
 }

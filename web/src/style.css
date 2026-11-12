@@ -707,3 +707,4 @@ img.fade.in { opacity: 1; }
 
 /* Contêiner das telas em React: não ocupa espaço no layout */
 .rx { display: contents; }
+#root { display: contents; }

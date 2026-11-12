@@ -1,11 +1,9 @@
-// Base: tema, DOM (h/svg/fill), login/Cognito, dados e API, fotos, componentes.
+// Base (sem tela): tema, login/Cognito, estado e API, fotos, utilidades.
 import { needAccount, showAuth } from './app.js';
 import { fmtDate, lang, t } from './i18n.js';
-import { SWATCH } from './color.js';
 import { guestApi, putPhoto } from './guest.js';
 import * as S from './stats.js';
 
-// Chalkmark: SPA sem framework. Rotas por hash, dados em memória, API em /api.
 
 // Endereço principal: chalkmark.vsoller.com.br. O boulder.* continua respondendo e manda para lá,
 // mantendo o caminho e o # (links de boulder compartilhado e de perfil continuam valendo).
@@ -41,12 +39,10 @@ export function setTheme(theme) {
 applyTheme();
 // Sem zoom de pinça na página (só na foto, que tem zoom próprio). O Safari ignora user-scalable=no.
 document.addEventListener('gesturestart', (e) => e.preventDefault());
-export const view = $('#view');
 export let cfg;
 /** Volta do login para o mesmo endereço em que a pessoa está (o app responde em mais de um domínio). */
 export const redirectUri = () => `${location.origin}/`;
 export const state = { gyms: [], sessions: [], climbs: [], settings: { scale: 'v', weeklySessions: 0, gradeGoal: null }, profile: null, loadedAt: 0 };
-export let timers = [];
 // Quem desenha com React escuta estas mudanças (emit depois de alterar `state`).
 const listeners = new Set();
 let version = 0;
@@ -54,29 +50,7 @@ export const subscribe = (f) => { listeners.add(f); return () => listeners.delet
 export const getVersion = () => version;
 export const emit = () => { version++; listeners.forEach((f) => f()); };
 
-// ---------- DOM ----------
-/** Cria elemento. on* = evento; style = objeto de propriedades (CSP proíbe atributo style). */
-export function h(tag, attrs, ...kids) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs ?? {})) {
-    if (v == null || v === false) continue;
-    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (k === 'style') for (const [p, x] of Object.entries(v)) el.style.setProperty(p, x);
-    else if (k === 'class' || typeof v === 'string' || typeof v === 'number' || v === true) el.setAttribute(k, v === true ? '' : v);
-    else el[k] = v;
-  }
-  el.append(...kids.flat(Infinity).filter((k) => k != null && k !== false));
-  return el;
-}
-/** Troca o conteúdo ignorando null/undefined/false (replaceChildren os viraria texto). */
-export const fill = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
 export const NS = 'http://www.w3.org/2000/svg';
-export function svg(tag, attrs, ...kids) {
-  const el = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs ?? {})) if (v != null) el.setAttribute(k, v);
-  el.append(...kids.flat().filter(Boolean));
-  return el;
-}
 
 export function toast(msg) {
   const el = $('#toast');
@@ -99,20 +73,6 @@ export function debounce(fn, ms) {
 export const sessionsText = (n) => (n === 1 ? t('unit.session1') : t('unit.sessions', { n }));
 export const colorName = (c) => t(`color.${c}`);
 export const grade = (g) => S.gradeLabel(g, state.settings.scale);
-export const swatch = (c) => h('span', { class: `swatch ${c === 'other' ? 'other' : ''}`, style: c === 'other' ? null : { background: SWATCH[c] } });
-
-/** Botões de escolha única (segmented). */
-export function seg(options, value, onPick) {
-  return h('div', { class: 'seg', role: 'group' }, options.map(([v, label]) =>
-    h('button', { type: 'button', 'data-v': String(v), 'aria-pressed': String(v === value), onclick: () => onPick(v) }, label)));
-}
-export function stepper(value, min, max, onChange, label) {
-  const out = h('output', { 'aria-live': 'polite', 'aria-label': label }, String(value));
-  const set = (n) => { value = Math.min(max, Math.max(min, n)); out.textContent = value; onChange(value); };
-  return h('div', { class: 'stepper' },
-    h('button', { type: 'button', 'aria-label': '−', onclick: () => set(value - 1) }, '−'), out,
-    h('button', { type: 'button', 'aria-label': '+', onclick: () => set(value + 1) }, '+'));
-}
 
 // ---------- autenticação (Cognito Managed Login, Authorization Code + PKCE) ----------
 export const TOKENS = 'bl:tokens';
@@ -202,7 +162,6 @@ export let guestMode = false;
 // Variáveis do app que a inicialização (app.js) troca: módulo ES só deixa quem declara reatribuir.
 export const setGuestMode = (v) => { guestMode = v; };
 export const setCfg = (v) => { cfg = v; };
-export const clearTimers = () => { timers.forEach(clearInterval); timers = []; };
 
 export async function api(path, { method = 'GET', body } = {}) {
   const jwt = await idToken();
@@ -257,7 +216,9 @@ export const upsert = (list, item) => { const i = list.findIndex((x) => x.id ===
 export async function toCanvas(file, max) {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
-  const c = h('canvas', { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k);
+  c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close?.();
   return c;
@@ -284,18 +245,4 @@ export async function upload({ url, fields, guest }, blob) {
     }
     await new Promise((r) => setTimeout(r, 1500 * attempt));
   }
-}
-
-// ---------- componentes ----------
-export function climbRow(c) {
-  const root = rootOf(c);
-  const thumb = root.thumbUrl
-    ? h('img', { class: 'thumb', src: root.thumbUrl, alt: '', loading: 'lazy', decoding: 'async', width: 52, height: 52 })
-    : h('div', { class: 'thumb color' }, swatch(c.color));
-  return h('li', {}, h('a', { class: 'climb-row', href: `#/climb/${c.id}` },
-    thumb,
-    h('div', { class: 'grow' },
-      h('div', { class: 'title' }, colorName(c.color), h('span', { class: 'grade-pill' }, grade(c.grade))),
-      h('div', { class: 'meta' }, h('span', {}, fmtDate(c.createdAt, { hour: '2-digit', minute: '2-digit' })), c.projectId && h('span', {}, t('climb.project')))),
-    h('span', { class: `badge ${c.result}` }, t(`result.${c.result}`))));
 }

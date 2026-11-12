@@ -1,7 +1,7 @@
-// Gamificação: XP, nível, sequência, trilha de graus e conquistas.
+// Gamificação (dados): ícones, formas das agarras, cores e o catálogo de conquistas. As telas ficam em ui/game.jsx.
 import { fmtDate, fmtDuration, lang, t } from './i18n.js';
 import * as S from './stats.js';
-import { $, state, h, fill, svg, toast, grade, gymOf } from './core.js';
+import { state, grade } from './core.js';
 
 // ---------- gamificação: XP, nível, sequência, trilha, conquistas ----------
 export const ICONS = {
@@ -26,26 +26,11 @@ export const PIN_ICON = 'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 
 export const PENCIL_ICON = 'M4 20h4L19 9l-4-4L4 16v4ZM13.5 6.5l4 4';
 export const CHECK_ICON = 'M5 12.5l4.5 4.5L19 7.5';
 export const SHARE_ICON = 'M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6';
-/** Ícone de traço (pin, compartilhar), na cor do texto. */
-export const lineIcon = (d) => svg('svg', { class: 'line-ico', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d }));
 export const HOLD_COLORS = ['#ff3d7f', '#ffc531', '#1fbf6a', '#2f5bff', '#ff7a1a', '#9b5cff', '#00b8d9'];
-export let holdSeq = 0;
-/** Agarra em SVG. fill = cor; fillPct (0-1) enche de baixo para cima sobre a cor de fundo. */
-export function hold(i, fill, { fillPct = 1, track = 'var(--surface-2)' } = {}) {
-  const d = HOLD_SHAPES[i % HOLD_SHAPES.length];
-  if (fillPct >= 1) return svg('svg', { class: 'hold', viewBox: '0 0 100 100', 'aria-hidden': 'true' }, svg('path', { d, fill }), svg('circle', { class: 'bolt', cx: 50, cy: 50, r: 5 }));
-  const id = `hg${++holdSeq}`;
-  const at = `${Math.round(fillPct * 100)}%`;
-  return svg('svg', { class: 'hold', viewBox: '0 0 100 100', 'aria-hidden': 'true' },
-    svg('defs', {}, svg('linearGradient', { id, x1: 0, y1: 1, x2: 0, y2: 0 },
-      svg('stop', { offset: at, 'stop-color': fill }), svg('stop', { offset: at, 'stop-color': track }))),
-    svg('path', { d, fill: `url(#${id})` }), svg('circle', { class: 'bolt', cx: 50, cy: 50, r: 5 }));
-}
 /** Risco de giz desenhado à mão (filtro #chalk no index.html). */
 export const TICK = 'M24 52c6 5 12 12 17 20 9-17 22-34 40-48';
 export const KIND_COLOR = { sessions: '#2f5bff', sends: '#1fbf6a', flash: '#ffc531', grade: '#ff3d7f', projects: '#9b5cff', streak: '#ff7a1a', big: '#00b8d9', gyms: '#00b8d9' };
 
-export const icon = (kind) => svg('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, svg('path', { d: ICONS[kind] }));
 
 export function achLabel(id) {
   const [kind, v] = id.split(':');
@@ -79,12 +64,4 @@ export function achCatalog() {
   if (best < 17) next.unshift({ id: `grade:${best + 1}` });
   if (!ids.has('big:10')) next.push({ id: 'big:10' });
   return { got: [...got].reverse(), next };
-}
-
-export function streakPill() {
-  const n = S.streakWeeks(state.sessions);
-  const el = $('#streak-pill');
-  el.hidden = !n;
-  el.replaceChildren(icon('streak'), String(n));
-  el.setAttribute('aria-label', `${n} ${t('streak.weeks')}`);
 }

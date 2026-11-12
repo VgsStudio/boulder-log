@@ -25,37 +25,7 @@
       <feComposite in="rough" in2="holes" operator="in"/>
     </filter>
   </svg>
-  <header class="top">
-    <a class="brand" href="#/"><img class="brand-mark" src="/icon.svg" alt="" width="30" height="30">Chalkmark</a>
-    <div class="row">
-    <button class="streak-pill num" id="streak-pill" type="button" hidden></button>
-    <button class="icon-btn" id="open-settings" type="button" hidden aria-label="Ajustes">
-      <svg class="gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-    </button>
-    </div>
-  </header>
-
-  <p class="offline-bar" role="status" data-t="offline.bar"></p>
-  <main id="view" tabindex="-1"></main>
-
-  <nav class="tabbar" id="tabbar" hidden>
-    <a href="#/feed" data-tab="feed" data-aria="tab.home">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4Z"/></svg>
-    </a>
-    <a href="#/" data-tab="session" data-aria="tab.session">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 10 6l4 7 2-3 4 10Z"/></svg>
-    </a>
-    <label class="tab-cam" id="tab-cam">
-      <span class="cam-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
-      <input type="file" accept="image/*" capture="environment" id="cam-input" hidden>
-    </label>
-    <a href="#/history" data-tab="history" data-aria="tab.history">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
-    </a>
-    <a href="#/me" data-tab="profile" data-aria="tab.profile">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4.4 4-7 8-7s7.2 2.6 8 7Z"/></svg>
-    </a>
-  </nav>
+  <div id="root"></div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <dialog class="sheet" id="sheet"></dialog>
