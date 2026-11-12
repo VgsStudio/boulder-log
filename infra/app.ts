@@ -18,6 +18,8 @@ new BoulderStack(app, 'BoulderLog-App', {
   aiModel: e.AI_MODEL || 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   aiDailyLimit: Number(e.AI_DAILY_LIMIT || 20),
   alertEmail: e.ALERT_EMAIL || undefined,
+  emailViaSes: e.EMAIL_VIA_SES === 'true',
+  replyToEmail: e.REPLY_TO_EMAIL || undefined,
 });
 
 // Só cria o papel do GitHub Actions quando a claim do repositório é informada.

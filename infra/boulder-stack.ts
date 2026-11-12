@@ -19,6 +19,7 @@ import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as r53targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as ses from 'aws-cdk-lib/aws-ses';
 import type { Construct } from 'constructs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -31,6 +32,11 @@ export interface BoulderStackProps extends StackProps {
   aiModel: string;
   aiDailyLimit: number;
   alertEmail?: string;
+  /** E-mails do login saem pelo SES (no-reply@zona). Só ligar com a conta fora do sandbox do SES:
+   *  em sandbox o SES só entrega para endereços verificados e o cadastro de amigos quebraria. */
+  emailViaSes: boolean;
+  /** Para onde vão as respostas aos e-mails do login (opcional; fica fora do código). */
+  replyToEmail?: string;
 }
 
 /** Boulder Log: site (CloudFront + S3), API (HTTP API + 1 Lambda), dados (DynamoDB),
@@ -99,6 +105,19 @@ export class BoulderStack extends Stack {
       ],
     }));
 
+    const zone = props.hostedZoneId
+      ? route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', { hostedZoneId: props.hostedZoneId, zoneName: props.zoneName })
+      : route53.HostedZone.fromLookup(this, 'Zone', { domainName: props.zoneName });
+
+    // ---------- E-mail (SES): domínio com DKIM e MAIL FROM próprio, para não cair no spam ----------
+    new ses.EmailIdentity(this, 'MailDomain', {
+      identity: ses.Identity.publicHostedZone(zone), // cria os CNAMEs do DKIM na zona
+      mailFromDomain: `mail.${props.zoneName}`, // MX + SPF criados na zona
+    });
+    // DMARC em modo só observação: alinha DKIM/SPF e ajuda o Gmail a confiar no domínio.
+    new route53.TxtRecord(this, 'Dmarc', { zone, recordName: `_dmarc.${props.zoneName}`, values: ['v=DMARC1; p=none;'] });
+    const fromEmail = `no-reply@${props.zoneName}`;
+
     // ---------- Login (Cognito Managed Login com a cara do app) ----------
     const userPool = new cognito.UserPool(this, 'Users', {
       userPoolName: 'boulder-log',
@@ -109,6 +128,16 @@ export class BoulderStack extends Stack {
       mfa: cognito.Mfa.OFF,
       passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      email: props.emailViaSes
+        ? cognito.UserPoolEmail.withSES({ fromEmail, fromName: 'Chalkmark', replyTo: props.replyToEmail, sesVerifiedDomain: props.zoneName })
+        : cognito.UserPoolEmail.withCognito(props.replyToEmail),
+      // Mesmo texto para o código de cadastro e o de "esqueci a senha" (o Cognito usa este modelo
+      // para os dois); em português e inglês porque o Cognito não sabe o idioma da pessoa.
+      userVerification: {
+        emailStyle: cognito.VerificationEmailStyle.CODE,
+        emailSubject: 'Seu código do Chalkmark / Your Chalkmark code',
+        emailBody: readFileSync(path.join(ROOT, 'infra', 'email-code.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '').replace(/\s*\n\s*/g, ''),
+      },
       removalPolicy: RemovalPolicy.RETAIN,
     });
     userPool.addDomain('Domain', {
@@ -187,9 +216,6 @@ export class BoulderStack extends Stack {
     for (const [p, method] of routes) httpApi.addRoutes({ path: p, methods: [method], integration, authorizer });
 
     // ---------- Site: CloudFront com S3 e a API na mesma origem ----------
-    const zone = props.hostedZoneId
-      ? route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', { hostedZoneId: props.hostedZoneId, zoneName: props.zoneName })
-      : route53.HostedZone.fromLookup(this, 'Zone', { domainName: props.zoneName });
     const certificate = new acm.Certificate(this, 'Cert', { domainName: props.domainName, validation: acm.CertificateValidation.fromDns(zone) });
     const cognitoDomain = `https://${props.cognitoDomainPrefix}.auth.${this.region}.amazoncognito.com`;
     const s3Hosts = `https://${photos.bucketName}.s3.amazonaws.com https://${photos.bucketName}.s3.${this.region}.amazonaws.com`;
