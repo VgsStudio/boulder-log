@@ -1328,9 +1328,9 @@ function withNav(el, hasPrev, hasNext, go) {
 const scanning = (on, el) => { if (on) el.classList.add('detecting'); return el; };
 
 /** Foto de um boulder com as agarras da via marcadas. */
-const climbStage = (url, c) => url && stage([
+const climbStage = (url, c, onOpen) => url && stage([
   photoImg(url, c.thumbUrl),
-  holdsOverlay(c.holds)]);
+  holdsOverlay(c.holds)], onOpen ? () => onOpen() : undefined);
 
 // ---------- social: perfil, amigos, ranking ----------
 const initials = (name = '') => name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
@@ -1559,9 +1559,9 @@ function viewUser(handle, isTab = false) {
       h('h2', {}, t('pin.title')),
       u.pinned
         ? [
-          h('div', { class: 'row' }, swatch(u.pinned.color), h('strong', {}, colorName(u.pinned.color)), h('span', { class: 'grade-pill' }, grade(u.pinned.grade)),
-            h('span', { class: 'grow' }), h('span', { class: `badge ${u.pinned.sent ? 'sent' : 'project'}` }, u.pinned.sent ? t('pin.sent') : t('result.project'))),
-          climbStage(u.pinned.photoUrl, u.pinned),
+          h('button', { class: 'row pinned-head', type: 'button', onclick: () => openPinned(u) }, swatch(u.pinned.color), h('strong', {}, colorName(u.pinned.color)), h('span', { class: 'grade-pill' }, grade(u.pinned.grade)),
+            h('span', { class: 'grow' }), h('span', { class: `badge ${u.pinned.sent ? 'sent' : 'project'}` }, u.pinned.sent ? t('pin.sent') : t('result.project')), h('span', { class: 'muted' }, '›')),
+          climbStage(u.pinned.photoUrl, u.pinned, () => openPinned(u)),
           u.pinned.tries > 1 && h('p', { class: 'muted small' }, t('pin.tries', { n: u.pinned.tries })),
           !u.me && u.friends && tryButton(u, u.pinned),
         ]
@@ -1609,6 +1609,11 @@ function shareProfileButton(u) {
       try { await navigator.clipboard.writeText(url); toast(t('share.copied')); } catch { toast(url); }
     },
   }, lineIcon(SHARE_ICON), h('span', {}, t('profile.share')));
+}
+
+/** Abre o boulder fixado: o meu na tela completa; o de outra pessoa na janela (com "Quero tentar"). */
+function openPinned(u) {
+  if (u.me) { setNav([u.pinned.id]); location.hash = `#/climb/${u.pinned.id}`; } else friendClimbSheet(u, u.pinned);
 }
 
 /** "Quero tentar": copia o boulder do amigo para os seus projetos. */
