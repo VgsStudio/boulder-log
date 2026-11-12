@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CfnOutput, Duration, Fn, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Duration, Fn, RemovalPolicy, SecretValue, Stack, type StackProps } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpUserPoolAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
@@ -37,6 +37,8 @@ export interface BoulderStackProps extends StackProps {
   /** E-mails do login saem pelo SES (no-reply@zona). Só ligar com a conta fora do sandbox do SES:
    *  em sandbox o SES só entrega para endereços verificados e o cadastro de amigos quebraria. */
   emailViaSes: boolean;
+  /** Entrar com Google: precisa do segredo `chalkmark/google-oauth` ({clientId, clientSecret}) no Secrets Manager. */
+  googleOAuth: boolean;
   /** Para onde vão as respostas aos e-mails do login (opcional; fica fora do código). */
   replyToEmail?: string;
 }
@@ -153,10 +155,24 @@ export class BoulderStack extends Stack {
       cognitoDomain: { domainPrefix: props.cognitoDomainPrefix },
       managedLoginVersion: cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
     });
+    const google = props.googleOAuth
+      ? new cognito.UserPoolIdentityProviderGoogle(this, 'Google', {
+        userPool,
+        clientId: SecretValue.secretsManager('chalkmark/google-oauth', { jsonField: 'clientId' }).unsafeUnwrap(),
+        clientSecretValue: SecretValue.secretsManager('chalkmark/google-oauth', { jsonField: 'clientSecret' }),
+        scopes: ['openid', 'email', 'profile'],
+        attributeMapping: { email: cognito.ProviderAttribute.GOOGLE_EMAIL, emailVerified: cognito.ProviderAttribute.other('email_verified') },
+      })
+      : undefined;
     const redirect = `${origin}/`;
     const client = userPool.addClient('Spa', {
       generateSecret: false,
-      authFlows: {},
+      // Tela de login do próprio app: e-mail e senha direto na API do Cognito (só HTTPS até a AWS).
+      authFlows: { userPassword: true },
+      supportedIdentityProviders: [
+        cognito.UserPoolClientIdentityProvider.COGNITO,
+        ...(props.googleOAuth ? [cognito.UserPoolClientIdentityProvider.GOOGLE] : []),
+      ],
       oAuth: {
         flows: { authorizationCodeGrant: true },
         scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
@@ -168,6 +184,7 @@ export class BoulderStack extends Stack {
       idTokenValidity: Duration.hours(1),
       refreshTokenValidity: Duration.days(30),
     });
+    if (google) client.node.addDependency(google);
     // Mesmas cores do app; DYNAMIC segue o tema claro/escuro do aparelho.
     const btn = (bg: string, hover: string, active: string) => ({
       defaults: { backgroundColor: bg, textColor: 'ffffffff' },
@@ -236,7 +253,7 @@ export class BoulderStack extends Stack {
       "worker-src 'self' blob:",
       "style-src 'self'",
       `img-src 'self' blob: data: ${s3Hosts}`,
-      `connect-src 'self' ${s3Hosts} ${cognitoDomain}`,
+      `connect-src 'self' ${s3Hosts} ${cognitoDomain} https://cognito-idp.${this.region}.amazonaws.com`,
       "manifest-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'none'",
@@ -320,6 +337,8 @@ export class BoulderStack extends Stack {
           cognitoDomain,
           clientId: client.userPoolClientId,
           redirectUri: redirect,
+          region: this.region,
+          google: !!props.googleOAuth,
         }),
       ],
       destinationBucket: webBucket,

@@ -102,7 +102,21 @@ const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-'
 const loadTokens = () => { try { return JSON.parse(localStorage.getItem(TOKENS)); } catch { return null; } };
 const saveTokens = (tk) => { try { localStorage.setItem(TOKENS, JSON.stringify({ ...tk, obtainedAt: Date.now() })); } catch {} };
 
-async function login(path = 'oauth2/authorize') {
+// ---------- login no próprio app (API do Cognito: e-mail e senha) ----------
+/** Chama a API pública do Cognito (sem credencial AWS; só o id do cliente do app). */
+async function cognitoApi(action, body) {
+  const res = await fetch(`https://cognito-idp.${cfg.region}.amazonaws.com/`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-amz-json-1.1', 'x-amz-target': `AWSCognitoIdentityProviderService.${action}` },
+    body: JSON.stringify({ ClientId: cfg.clientId, ...body }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.message || action), { code: String(data.__type || '').split('#').pop() });
+  return data;
+}
+const fromAuthResult = (r) => ({ id_token: r.IdToken, access_token: r.AccessToken, refresh_token: r.RefreshToken, expires_in: r.ExpiresIn, via: 'api' });
+
+async function login(path = 'oauth2/authorize', extra = {}) {
   try { if (location.hash.length > 2) sessionStorage.setItem('cm:after', location.hash); } catch {}
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   sessionStorage.setItem(VERIFIER, verifier);
@@ -110,7 +124,7 @@ async function login(path = 'oauth2/authorize') {
   const url = new URL(`${cfg.cognitoDomain}/${path}`);
   Object.entries({
     response_type: 'code', client_id: cfg.clientId, redirect_uri: redirectUri(), scope: 'openid email',
-    code_challenge_method: 'S256', code_challenge: challenge, lang: lang === 'pt' ? 'pt-BR' : 'en',
+    code_challenge_method: 'S256', code_challenge: challenge, lang: lang === 'pt' ? 'pt-BR' : 'en', ...extra,
   }).forEach(([k, v]) => url.searchParams.set(k, v));
   location.assign(url);
 }
@@ -144,9 +158,12 @@ async function idToken() {
   let tk = loadTokens();
   if (tk && Date.now() - tk.obtainedAt > (tk.expires_in - 120) * 1000) {
     // Um refresh por vez, mesmo com várias chamadas em paralelo.
-    refreshing ??= tokenCall({ grant_type: 'refresh_token', refresh_token: tk.refresh_token }).finally(() => (refreshing = null));
+    refreshing ??= (tk.via === 'api'
+      ? cognitoApi('InitiateAuth', { AuthFlow: 'REFRESH_TOKEN_AUTH', AuthParameters: { REFRESH_TOKEN: tk.refresh_token } })
+        .then((r) => fromAuthResult(r.AuthenticationResult), () => null)
+      : tokenCall({ grant_type: 'refresh_token', refresh_token: tk.refresh_token })).finally(() => (refreshing = null));
     const fresh = tk.refresh_token && (await refreshing);
-    if (fresh) saveTokens((tk = { ...fresh, refresh_token: tk.refresh_token }));
+    if (fresh) saveTokens((tk = { ...fresh, refresh_token: tk.refresh_token, via: tk.via }));
     else { try { localStorage.removeItem(TOKENS); } catch {} tk = null; }
   }
   return tk?.id_token ?? null;
@@ -1847,15 +1864,99 @@ function render() {
   document.querySelectorAll('#tabbar a').forEach((a) => (a.dataset.tab === tab ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
 }
 
+const GOOGLE_G = [['#4285F4', 'M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z'],
+  ['#34A853', 'M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z'],
+  ['#FBBC05', 'M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14Z'],
+  ['#EA4335', 'M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 6 12 6Z']];
+
+/** Entrar, criar conta, confirmar e-mail e trocar a senha, tudo na tela do app. */
 function showAuth() {
   $('#tabbar').hidden = true;
   $('#open-settings').hidden = true;
-  view.replaceChildren(h('div', { class: 'auth' },
-    h('div', { class: 'auth-mark' }, hold(0, '#2f5bff'), chalkTick('draw')),
+  const f = { mode: 'login', email: '', password: '', code: '', error: '', info: '', busy: false };
+  const box = h('form', { class: 'auth', novalidate: true });
+  const go = (mode, info = '') => { Object.assign(f, { mode, error: '', info, code: '' }); draw(); };
+  const msg = (err) => ({
+    NotAuthorizedException: t('auth.err.wrong'), UsernameExistsException: t('auth.err.exists'),
+    InvalidPasswordException: t('auth.err.password'), CodeMismatchException: t('auth.err.code'),
+    ExpiredCodeException: t('auth.err.expired'), LimitExceededException: t('auth.err.limit'),
+    TooManyRequestsException: t('auth.err.limit'), TooManyFailedAttemptsException: t('auth.err.limit'),
+    InvalidParameterException: t('auth.err.email'), UserNotFoundException: t('auth.err.wrong'),
+  }[err.code] ?? (navigator.onLine ? t('error.generic') : t('error.offline')));
+  const signedIn = (r) => {
+    saveTokens(fromAuthResult(r.AuthenticationResult));
+    let after = '';
+    try { after = sessionStorage.getItem('cm:after') || ''; sessionStorage.removeItem('cm:after'); } catch {}
+    location.replace(`/${after}`);
+    location.reload();
+  };
+  const doLogin = () => cognitoApi('InitiateAuth', { AuthFlow: 'USER_PASSWORD_AUTH', AuthParameters: { USERNAME: f.email, PASSWORD: f.password } }).then(signedIn);
+  const actions = {
+    login: () => doLogin().catch(async (err) => {
+      if (err.code !== 'UserNotConfirmedException') throw err;
+      await cognitoApi('ResendConfirmationCode', { Username: f.email }).catch(() => {});
+      go('confirm', t('auth.codeSent', { e: f.email }));
+    }),
+    signup: async () => {
+      await cognitoApi('SignUp', { Username: f.email, Password: f.password, UserAttributes: [{ Name: 'email', Value: f.email }] });
+      go('confirm', t('auth.codeSent', { e: f.email }));
+    },
+    confirm: async () => {
+      await cognitoApi('ConfirmSignUp', { Username: f.email, ConfirmationCode: f.code });
+      if (f.password) await doLogin(); else go('login', t('auth.confirmed'));
+    },
+    forgot: async () => {
+      await cognitoApi('ForgotPassword', { Username: f.email });
+      go('reset', t('auth.codeSent', { e: f.email }));
+    },
+    reset: async () => {
+      await cognitoApi('ConfirmForgotPassword', { Username: f.email, ConfirmationCode: f.code, Password: f.password });
+      await doLogin();
+    },
+  };
+  box.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (f.busy) return;
+    f.email = f.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) { f.error = t('auth.err.email'); draw(); return; }
+    Object.assign(f, { busy: true, error: '' });
+    draw();
+    try { await actions[f.mode](); } catch (err) { f.error = msg(err); }
+    f.busy = false;
+    draw();
+  });
+  const field = (key, label, attrs) => h('label', { class: 'field' }, h('span', {}, label),
+    h('input', { ...attrs, value: f[key], oninput: (e) => (f[key] = e.target.value) }));
+  const pw = (label, autocomplete) => h('label', { class: 'field' }, h('span', {}, label),
+    h('div', { class: 'pw' },
+      h('input', { type: 'password', required: true, autocomplete, value: f.password, oninput: (e) => (f.password = e.target.value) }),
+      h('button', { class: 'link small', type: 'button', onclick: (e) => { const i = e.currentTarget.previousSibling; i.type = i.type === 'password' ? 'text' : 'password'; e.currentTarget.textContent = i.type === 'password' ? t('auth.show') : t('auth.hide'); } }, t('auth.show'))),
+    autocomplete === 'new-password' && h('span', { class: 'small muted' }, t('auth.pwRule')));
+  const email = () => field('email', t('auth.email'), { type: 'email', required: true, autocomplete: 'username', inputmode: 'email', autocapitalize: 'none' });
+  const code = () => field('code', t('auth.code'), { type: 'text', required: true, inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 8 });
+  const submit = (label) => h('button', { class: 'btn primary big block', type: 'submit', disabled: f.busy }, f.busy ? t('auth.wait') : label);
+  const draw = () => fill(box,
+    h('img', { class: 'auth-logo', src: '/icon.svg', alt: '', width: 88, height: 88 }),
     h('h1', {}, t('auth.title')),
-    h('p', {}, t('auth.lead')),
-    h('button', { class: 'btn primary big block', type: 'button', onclick: () => login() }, t('auth.login')),
-    h('button', { class: 'btn big block', type: 'button', onclick: () => login('signup') }, t('auth.signup'))));
+    h('p', { class: 'auth-lead' }, t('auth.lead')),
+    (f.mode === 'login' || f.mode === 'signup') && seg([['login', t('auth.login')], ['signup', t('auth.signup')]], f.mode, (m) => go(m)),
+    f.info && h('p', { class: 'auth-info' }, f.info),
+    f.mode === 'login' && [email(), pw(t('auth.password'), 'current-password'), submit(t('auth.login')),
+      h('button', { class: 'link small', type: 'button', onclick: () => go('forgot') }, t('auth.forgot'))],
+    f.mode === 'signup' && [email(), pw(t('auth.password'), 'new-password'), submit(t('auth.signup'))],
+    f.mode === 'confirm' && [code(), submit(t('auth.confirm')),
+      h('button', { class: 'link small', type: 'button', onclick: () => cognitoApi('ResendConfirmationCode', { Username: f.email }).then(() => go('confirm', t('auth.codeSent', { e: f.email })), (err) => { f.error = msg(err); draw(); }) }, t('auth.resend'))],
+    f.mode === 'forgot' && [h('h2', {}, t('auth.forgotTitle')), email(), submit(t('auth.sendCode'))],
+    f.mode === 'reset' && [code(), pw(t('auth.newPassword'), 'new-password'), submit(t('auth.savePassword'))],
+    f.error && h('p', { class: 'auth-error', role: 'alert' }, f.error),
+    f.mode !== 'login' && f.mode !== 'signup' && h('button', { class: 'link small', type: 'button', onclick: () => go('login') }, `‹ ${t('back')}`),
+    cfg.google && (f.mode === 'login' || f.mode === 'signup') && [
+      h('div', { class: 'auth-or' }, h('span', {}, t('auth.or'))),
+      h('button', { class: 'btn block google-btn', type: 'button', onclick: () => login('oauth2/authorize', { identity_provider: 'Google' }) },
+        svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, GOOGLE_G.map(([c, d]) => svg('path', { d, fill: c }))), t('auth.google')),
+    ]);
+  draw();
+  view.replaceChildren(box);
 }
 
 async function boot() {

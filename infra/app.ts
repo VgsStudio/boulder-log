@@ -20,6 +20,7 @@ new BoulderStack(app, 'BoulderLog-App', {
   aiDailyLimit: Number(e.AI_DAILY_LIMIT || 20),
   alertEmail: e.ALERT_EMAIL || undefined,
   emailViaSes: e.EMAIL_VIA_SES === 'true',
+  googleOAuth: e.GOOGLE_OAUTH === 'true',
   replyToEmail: e.REPLY_TO_EMAIL || undefined,
 });
 
