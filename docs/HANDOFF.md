@@ -1,7 +1,7 @@
 # Chalkmark: handoff
 
 Documento para retomar o projeto em outra sessão: o que é, o que existe, por que foi feito assim, como
-operar e o que vem depois. Atualizado em 12/11/2026.
+operar e o que vem depois. Atualizado em 12/11/2026 (tarde).
 
 > Repositório público: este arquivo não traz IDs de conta, pool, tabela ou bucket. Para achar:
 > `aws cloudformation describe-stack-resources --stack-name BoulderLog-App` (região us-east-1).
@@ -21,8 +21,11 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 
 | Área | O que faz |
 |---|---|
+| **Abas** | Sessão · Histórico · **📷 (centro)** · Feed · Perfil. A Evolução fica dentro do Perfil (`#/progress`). |
+| **Câmera** (centro da barra) | Foto → novo boulder direto. Sem sessão aberta, abre uma no último ginásio usado. |
+| **Registro rápido** | Na sessão: cor + grau + resultado numa janela, sem foto. |
 | **Sessão** | Começa no ginásio (reconhecido por GPS, até 500 m). Registra boulders e encerra com sensação/nota. **Encerra sozinha**: >1 km do ginásio (com o app aberto, a cada 5 min) ou 4 h sem registro. |
-| **Registrar boulder** | Foto → detector acha as agarras (Web Worker, não trava a tela) → toque numa agarra = cor + via sugerida. Toque inclui/tira agarra; **segurar** = início (verde) → topo (vermelha) → normal. Pinça amplia só a foto. Cor, grau (V ou Font) e resultado (Flash/Mandou/Projeto). Ao continuar um projeto, o resultado é obrigatório. |
+| **Registrar boulder** | Foto → detector acha as agarras (Web Worker, não trava a tela) → toque numa agarra = cor + via sugerida. Toque inclui/tira agarra; **segurar** = início (verde) → topo (vermelha) → normal; **pincel** 🖌 = arrastar o dedo marca/desmarca várias. Enquanto procura, a foto fica cinza com uma varredura. Pinça amplia só a foto. Cor, grau (V ou Font) e resultado (Flash/Mandou/Projeto). Ao continuar um projeto, o resultado é obrigatório. |
 | **Boulder salvo** | Editar cor/grau, **editar agarras** (o detector roda de novo), fixar no perfil (alfinete), compartilhar link, excluir (o projeto inteiro, se for a raiz). Navega com **‹ ›** e arrastando para o lado. Foto abre pela miniatura e troca pela grande. |
 | **Projetos** | "Mandei!" / "Tentei de novo" / "A via saiu / desisti". Contador de tentativas não existe (decisão: ninguém atualiza). |
 | **Gamificação** | XP por via (grau, flash), nível, sequência semanal (o foguinho explica ao tocar), metas (sessões/semana, grau), trilha de graus (5 mandadas = domina), conquistas, sons e vibração. |
@@ -30,7 +33,12 @@ Duolingo/GymRats. O dono usa com amigos; o cadastro é aberto.
 | **Histórico** | Calendário, sessões (o mais recente em cima) e galeria filtrável. |
 | **Perfil** (aba da direita) | Nome, @, foto, nível, seguidores. **Amigos** ficam dentro (ranking da semana, busca, "talvez você conheça"). Boulder fixado. Galeria com etiqueta **Mandado/Flash/Projeto/Desistido** e filtros. Compartilhar perfil. Volta para a mesma posição da página. |
 | **Social** | Seguir sem aprovação. **Amigo = os dois se seguem**. Histórico, fotos e XP só para amigos; o cartão público (nome, @, nível, fixado) é visível para qualquer pessoa com o link, até sem conta. "Quero tentar" copia o boulder de um amigo para os seus projetos. |
-| **Compartilhar boulder** | Link `#/s/<token>` (90 dias) com foto, agarras, cor, grau e **nome do ginásio**. Quem recebe adiciona aos próprios projetos. |
+| **Compartilhar boulder** | Ícone no topo do boulder. Link `#/s/<token>` (90 dias) com foto, agarras, cor, grau e **nome do ginásio**. Quem recebe adiciona uma **cópia** aos próprios projetos (editar uma não muda a outra). Dá para **desativar os links** de um boulder; excluir o boulder também desativa. |
+| **Feed** | Boulders mandados e projetos novos dos **amigos** (mútuos), rolagem infinita, **🔥** (com notificação ao dono), "Quero tentar", pessoas para seguir intercaladas e cartões de **Exemplo** quando vazio. |
+| **Bloquear** | No perfil da pessoa: desfaz o seguir dos dois lados, impede seguir de novo e tira a pessoa de sugestões e busca. |
+| **Notificações** | Web Push (no iPhone, só com o app na tela inicial). **Lembrete diário personalizado** ("Vitor, …") 1 h antes do horário em que a pessoa costuma começar as sessões (aprendido; pode fixar em Ajustes). A mensagem depende da situação: sequência em risco no fim de semana, projeto esperando, meta da semana, semana em branco ou "semana garantida". Não envia se a pessoa já escalou no dia. Também avisa novo seguidor e 🔥. Ajustes: liga/desliga, horário e "enviar teste". |
+| **App instalado / offline** | O service worker (`web/sw.js`) guarda o app e uma cópia dos dados: sem sinal, abre com aviso. Convite para instalar na tela inicial (passo a passo no iPhone, botão no Android). |
+| **Tutorial** | Na 1ª abertura, tela escura com destaque e balões (câmera, sessão, foguinho, feed, perfil, ajustes), e um passo na 1ª foto (tocar, segurar, pincel). Depois vem o convite de instalar e o das notificações. |
 | **Login** | Tela própria do app (entrar, criar conta, código por e-mail, esqueci a senha) + **Entrar com Google**. Google com o mesmo e-mail de uma conta existente é **vinculado** a ela (`services/presignup.ts`). Boas-vindas com nome e @ sugeridos na 1ª entrada. |
 | **Usar sem conta** | Tudo funciona no navegador (localStorage + IndexedDB). Na 1ª ação que exige conta (salvar boulder, ver perfil, abrir link) aparece um aviso dispensável; na 2ª, ou após 1 dia de uso, trava na tela de criar conta. Os dados ficam 30 dias e **vão junto** ao entrar (`migrateGuest`). |
 | **Avaliação** | "Está gostando?" com 5 estrelas e comentário. Aparece de tempos em tempos (7 dias se fechar, 60 se avaliar) e em Ajustes. Os resultados ficam na tabela, em `pk = FEEDBACK`. |
@@ -47,14 +55,19 @@ Navegador (SPA vanilla, sem framework)
  ├─ web/src/app.js        telas, roteamento por hash, estado em memória
  ├─ detect-worker.js      YOLOv8n fp16 (ONNX, onnxruntime-web 1.31, 1 thread) → caixas
  ├─ color.js / detect.js  cor (CIELAB/LCh, desconta parede e magnésio) e agrupamento da via
- └─ guest.js              modo sem conta (mesmas rotas da API, respondidas localmente)
+ ├─ guest.js              modo sem conta (mesmas rotas da API, respondidas localmente)
+ └─ web/sw.js             service worker: cache do app (offline) e notificações push
 
 CloudFront (CSP rígida, COOP/COEP, HSTS) ── S3 (assets com hash = cache 1 ano; páginas no-cache)
  └─ /api/* ── API Gateway HTTP (autorizador JWT Cognito; /api/public/* sem autorizador)
               └─ Lambda única services/api.ts (Node 22, ARM, 1024 MB, roteia por routeKey)
                   ├─ DynamoDB tabela única (RETAIN + PITR)
                   ├─ S3 fotos privado (presigned POST/GET; photos/<sub>/<climbId>/full|thumb, photos/<sub>/avatar)
-                  └─ Bedrock Converse: Claude Haiku 4.5 (só estilo da via)
+                  ├─ Bedrock Converse: Claude Haiku 4.5 (só estilo da via)
+                  └─ Web Push (services/push.ts, lib web-push; chaves VAPID geradas pelo servidor, em CONFIG/VAPID)
+
+EventBridge (minuto 1 de cada hora) ── Lambda NotifyFn (services/notify.ts → push.ts): Query no balde
+NOTIFY#<hora UTC> → lembrete diário de quem está nele. ~720 execuções/mês, sem Scan.
 
 Cognito (plano Essentials): pool "boulder-log", senha forte (12+), sem MFA, auth USER_PASSWORD_AUTH pela tela
 do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-mail via SES (DKIM, MAIL FROM, DMARC).
@@ -75,6 +88,13 @@ do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-
 | `HANDLE#<@>` | `HANDLE` | unicidade do @ |
 | `SHARE#<token>` | `SHARE` | boulder compartilhado (TTL 90 dias) |
 | `FEEDBACK` | `<dia>#<sub>` | avaliação do app |
+| `USER#<sub>` | `PUSH#<hash>` | inscrição de notificação de um aparelho (endpoint + chaves) |
+| `NOTIFY#<HH>` | `<sub>` | quem recebe o lembrete às HH (UTC) |
+| `USER#<sub>` | `SETTINGS` (campos `push*`) | `pushOn`, `pushTz`, `pushHour` (null = aprendido), `pushLang`, `pushBucket`, `lastPushDay` |
+| `CONFIG` | `VAPID` | chaves VAPID (geradas na 1ª vez) |
+| `USER#<dono>` | `REACT#<climbId>#<sub>` | 🔥 de alguém num boulder (o contador fica em `fire` no boulder) |
+| `USER#<sub>` | `SHAREREF#<climbId>#<token>` | referência dos links de um boulder (para desativar) |
+| `USER#<sub>` | `BLOCK#<sub>` | pessoa bloqueada |
 
 Os ids (`newId`) são ordenáveis pelo tempo (base36 dos ms), e é isso que permite consultar "boulders desde segunda" por intervalo.
 
@@ -83,6 +103,8 @@ Os ids (`newId`) são ordenáveis pelo tempo (base36 dos ms), e é isso que perm
 `/api/gyms`, `/api/sessions`, `/api/climbs` (+`/media`, `/analyze`, `/share`), `/api/settings`,
 `/api/profile`, `/api/users` (busca), `/api/users/{handle}` (+`/follow`, `/climbs/{id}/copy`), `/api/social`
 (ranking + sugestões), `/api/shares/{id}` (+`/accept`), `/api/feedback`, `DELETE /api/account`,
+`/api/feed` (+`/{handle}/{id}/fire`), `/api/users/{handle}/block`, `DELETE /api/climbs/{id}/share`,
+`/api/push/key|subscribe|unsubscribe|prefs|test`,
 `/api/public/shares/{id}`, `/api/public/users/{handle}`.
 
 ---
@@ -175,13 +197,11 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 
 ### Combinado e ainda não feito
 
-- **Arrastar o dedo para marcar várias agarras de uma vez.** Proposto como alternativa aos vários cliques.
+- **Testar notificações num iPhone real** (o servidor e o agendamento foram testados; a entrega no aparelho só com o dono).
 - **Usar os adesivos do ginásio** (duas bolinhas na saída, plaquinha do grau) para separar duas vias da mesma cor. A regra do ginásio não foi confirmada.
 - **Verificação de branding no Google** (domínio no Search Console via TXT no Route 53), para mostrar "Chalkmark" na tela do Google.
 - **Tirar o nome antigo do repositório da confiança OIDC.**
-- **Notificações:** "fulano te seguiu", "amigo mandou o seu fixado", lembrete da sequência.
 - **Treino da IA:** `ml/features.mjs` e `ml/train.mjs` quando houver ~150 vias corrigidas (plano em `ml/README.md`).
-- **Revogar link compartilhado** e **bloquear pessoa**.
 
 ### Pequenos ajustes conhecidos
 
@@ -194,7 +214,6 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 
 **Hábito e retorno**
 
-- Lembrete da sequência por **web push**. Funciona no iPhone com o app instalado na tela inicial: "faltam 2 dias para salvar sua sequência".
 - **Protetor de sequência** comprado com XP, como o "streak freeze" do Duolingo.
 - **Ligas semanais** entre amigos ou no ginásio (bronze → prata → ouro), com sobe e desce.
 - **Desafios da semana:** "mande 3 V3", "flash em 2 cores diferentes", "complete o circuito amarelo".
@@ -202,14 +221,11 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 
 **Social**
 
-- **Feed de amigos** com reação de um toque (🔥 / 👏) e "mandou o projeto depois de 4 sessões".
 - **Desafiar um amigo** com um boulder (o link compartilhado com prazo) e ver quem manda primeiro.
 - **Ranking do ginásio** (opcional), pelos ginásios próximos.
 
 **Facilidade**
 
-- **Instalar como app:** um aviso "Adicionar à tela inicial" depois da 2ª sessão, e modo offline (service worker) para o ginásio sem sinal.
-- **Botão de câmera direto** no centro da barra de abas: um toque e já está registrando.
-- **Registro rápido sem foto:** cor + grau + Mandei em dois toques, para quem não quer fotografar tudo.
-- **Primeira experiência guiada:** 3 telas (registre, marque a via, acompanhe a sequência) e escolher a meta semanal logo de cara.
-- **Arrastar para marcar várias agarras** (acima) e **sugestão de grau** pelo histórico daquela cor no ginásio.
+- **Sugestão de grau** pelo histórico daquela cor no ginásio.
+- **Registrar offline** (fila de envio para quando o sinal voltar); hoje o app só abre e mostra sem sinal.
+- **Feed materializado** se o número de amigos crescer (hoje é uma Query por amigo por página).
