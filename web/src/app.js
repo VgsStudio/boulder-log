@@ -32,6 +32,8 @@ function setTheme(theme) {
   applyTheme(theme);
 }
 applyTheme();
+// Sem zoom de pinça na página (só na foto, que tem zoom próprio). O Safari ignora user-scalable=no.
+document.addEventListener('gesturestart', (e) => e.preventDefault());
 const view = $('#view');
 let cfg;
 /** Volta do login para o mesmo endereço em que a pessoa está (o app responde em mais de um domínio). */
@@ -241,6 +243,10 @@ const HOLD_SHAPES = [
   'M22 20c12-14 40-14 56-2s20 38 8 54-38 20-54 10S2 52 6 38s4-6 16-18Z',
   'M58 10c16 4 30 20 30 38s-14 34-32 40-38-2-46-18-4-36 10-48 22-16 38-12Z',
 ];
+const PIN_ICON = 'M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z';
+const SHARE_ICON = 'M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6';
+/** Ícone de traço (pin, compartilhar), na cor do texto. */
+const lineIcon = (d) => svg('svg', { class: 'line-ico', viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d }));
 const HOLD_COLORS = ['#ff3d7f', '#ffc531', '#1fbf6a', '#2f5bff', '#ff7a1a', '#9b5cff', '#00b8d9'];
 let holdSeq = 0;
 /** Agarra em SVG. fill = cor; fillPct (0-1) enche de baixo para cima sobre a cor de fundo. */
@@ -332,6 +338,18 @@ function hero() {
       h('div', { class: 'progress' }, h('span', { style: { '--w': `${(lv.into / lv.need) * 100}%` } })),
       h('span', { class: 'small num' }, t('xp.toNext', { a: lv.into, b: lv.need }))),
     h('p', { class: 'small hero-msg' }, dots.some(Boolean) ? t('streak.done') : n ? t('streak.keep') : t('streak.start')));
+}
+
+/** O que é o foguinho: a sequência de semanas, com a semana atual. */
+function streakSheet() {
+  const n = S.streakWeeks(state.sessions);
+  const thisWeek = S.weekDots(state.sessions).some(Boolean);
+  openSheet(h('div', { class: 'stack' },
+    h('h2', {}, t('streak.title', { n })),
+    h('p', {}, t('streak.explain')),
+    hero(),
+    h('p', { class: 'muted' }, thisWeek ? t('streak.safe') : t('streak.risk')),
+    h('button', { class: 'btn block', type: 'button', onclick: () => $('#sheet').close() }, t('settings.close'))));
 }
 
 function streakPill() {
@@ -867,6 +885,52 @@ function viewClimb(id) {
     } catch (err) { fail(err); }
   };
 
+  // Edição das agarras da via sobre a foto salva: o detector roda de novo e cada toque inclui ou tira.
+  let holdEdit = null; // { canvas, rgba, boxes, holds, status }
+  const startHoldEdit = async () => {
+    const r = rootOf(climbOf(id));
+    holdEdit = { holds: (r.holds ?? []).map((b) => ({ ...b })), status: 'loading' };
+    draw();
+    try {
+      const url = photo?.url ?? (await api(`/climbs/${r.id}/media`)).photoUrl;
+      const blob = await (await fetch(url, { cache: 'no-store' })).blob();
+      const canvas = await toCanvas(blob, 1568);
+      if (!holdEdit) return;
+      Object.assign(holdEdit, { canvas, rgba: canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height).data });
+      draw();
+      const gym = gymOf(state.sessions.find((s) => s.id === r.sessionId)?.gymId);
+      const boxes = await detectHolds(canvas, gym?.palette ?? {});
+      if (holdEdit) { Object.assign(holdEdit, { boxes, status: 'done' }); draw(); }
+    } catch (err) {
+      console.error(err);
+      if (holdEdit) { holdEdit.status = holdEdit.canvas ? 'failed' : 'done'; if (!holdEdit.canvas) { holdEdit = null; fail(err); } draw(); }
+    }
+  };
+  const tapHold = (x, y) => {
+    const e = holdEdit;
+    const c = e.canvas;
+    const inside = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+    const had = e.holds.findIndex(inside);
+    if (had >= 0) { e.holds.splice(had, 1); draw(); return; }
+    let b = e.boxes && holdAt(e.boxes, x, y, 0.03, c.width / c.height);
+    if (!b) { b = growRegion(e.rgba, c.width, c.height, x, y); if (b) e.boxes?.push(b); }
+    if (!b) return;
+    if (!e.holds.includes(b)) e.holds.push(b);
+    playTick();
+    draw();
+  };
+  const saveHolds = async (ev) => {
+    ev.currentTarget.disabled = true;
+    const r = rootOf(climbOf(id));
+    const holds = holdEdit.holds.slice(0, 80).map(({ x, y, w, h: hh }) => ({ x, y, w, h: hh }));
+    try {
+      upsert(state.climbs, await api(`/climbs/${r.id}`, { method: 'PATCH', body: { holds } }));
+      holdEdit = null;
+      toast(t('holds.saved'));
+      draw();
+    } catch (err) { fail(err); ev.target.disabled = false; }
+  };
+
   const draw = () => {
     const cur = climbOf(id);
     const r = rootOf(cur);
@@ -881,6 +945,10 @@ function viewClimb(id) {
       h('div', { class: 'row' }, h('button', { class: 'link', type: 'button', onclick: () => history.back() }, `‹ ${t('back')}`)),
       h('div', { class: 'row title-row' },
         h('h1', { class: 'row grow' }, swatch(cur.color), colorName(cur.color), h('span', { class: 'grade-pill' }, grade(cur.grade))),
+        h('button', {
+          class: 'icon-btn pin-btn', type: 'button', onclick: () => pinClimb(r),
+          'aria-pressed': String(state.profile?.pinned === r.id), 'aria-label': state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add'),
+        }, lineIcon(PIN_ICON)),
         h('button', { class: 'link', type: 'button', onclick: () => { editing = !editing; draw(); } }, editing ? t('climb.done') : t('climb.edit'))),
       // Edição de cor e grau (num projeto, as tentativas seguintes usam a cor/grau da raiz).
       editing && h('section', { class: 'card stack' },
@@ -891,7 +959,18 @@ function viewClimb(id) {
           h('div', { class: 'chips scroll', role: 'group' }, S.GRADES.map((g) =>
             h('button', { class: 'chip grade', type: 'button', 'aria-pressed': String(cur.grade === g), onclick: () => patchClimb({ grade: g }) }, grade(g)))))),
 
-      r.photoType && climbStage(photo?.url ?? r.thumbUrl, r),
+      r.photoType && (holdEdit
+        ? h('section', { class: 'stack' },
+          holdEdit.canvas
+            ? stage([holdEdit.canvas, holdsOverlay(holdEdit.holds, holdEdit.boxes ?? [])], tapHold)
+            : null,
+          h('p', { class: `small detect-status ${holdEdit.status}` },
+            holdEdit.status === 'loading' ? t('detect.loading') : holdEdit.status === 'failed' ? t('detect.failed') : t('holds.hint', { n: holdEdit.holds.length })),
+          h('div', { class: 'row' },
+            h('button', { class: 'btn ghost grow', type: 'button', onclick: () => { holdEdit = null; draw(); } }, t('holds.cancel')),
+            h('button', { class: 'btn primary grow', type: 'button', onclick: saveHolds }, t('holds.save'))))
+        : [climbStage(photo?.url ?? r.thumbUrl, r),
+          h('button', { class: 'link small', type: 'button', onclick: startHoldEdit }, t('holds.edit'))]),
 
       h('section', { class: 'card stack' },
         seg(RESULTS.map((x) => [x, t(`result.${x}`)]), cur.result, (x) => patchClimb({ result: x })),
@@ -929,8 +1008,6 @@ function viewClimb(id) {
           : h('button', { class: 'btn block', type: 'button', onclick: analyze }, t('ai.analyze'))),
 
       h('button', { class: 'btn block', type: 'button', onclick: (e) => shareClimb(r, e.currentTarget) }, t('share.button')),
-      h('button', { class: 'btn block', type: 'button', onclick: () => pinClimb(r) },
-        state.profile?.pinned === r.id ? t('pin.remove') : t('pin.add')),
       h('button', { class: 'btn ghost danger block', type: 'button', onclick: del }, t('climb.delete')),
     );
   };
@@ -1235,8 +1312,11 @@ function viewUser(handle) {
           h('span', { class: 'level-pill num' }, t('xp.level', { n: u.level })),
           t('profile.counts', { a: u.followers, b: u.follows })))),
     u.me
-      ? h('button', { class: 'btn block', type: 'button', onclick: async () => { if (await profileSheet()) load(); } }, t('profile.edit'))
-      : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends'))),
+      ? h('div', { class: 'row' },
+        h('button', { class: 'btn grow', type: 'button', onclick: async () => { if (await profileSheet()) load(); } }, t('profile.edit')),
+        shareProfileButton(u))
+      : h('div', { class: 'row' }, followButton(u, () => load()), u.friends && h('span', { class: 'badge friends' }, t('follow.friends')),
+        h('span', { class: 'grow' }), shareProfileButton(u)),
 
     h('section', { class: 'card stack pinned' },
       h('h2', {}, t('pin.title')),
@@ -1268,6 +1348,19 @@ function viewUser(handle) {
   const load = () => api(`/users/${handle}`).then(draw, (err) => fill(box, h('p', { class: 'muted' }, err.status === 404 ? t('profile.notFound') : t('error.generic'))));
   load();
   return box;
+}
+
+/** Link do perfil (abre o perfil depois do login, se preciso). */
+function shareProfileButton(u) {
+  return h('button', {
+    class: 'btn share-btn', type: 'button', 'aria-label': t('profile.share'),
+    onclick: async () => {
+      const url = `${location.origin}/#/u/${u.handle}`;
+      const text = u.me ? t('profile.shareMine', { h: u.handle }) : t('profile.shareOther', { n: u.name });
+      if (navigator.share) { navigator.share({ title: 'Chalkmark', text, url }).catch(() => {}); return; }
+      try { await navigator.clipboard.writeText(url); toast(t('share.copied')); } catch { toast(url); }
+    },
+  }, lineIcon(SHARE_ICON), h('span', {}, t('profile.share')));
 }
 
 /** "Quero tentar": copia o boulder do amigo para os seus projetos. */
@@ -1559,6 +1652,7 @@ async function boot() {
   document.querySelectorAll('[data-t]').forEach((el) => (el.textContent = t(el.dataset.t)));
   $('#open-settings').setAttribute('aria-label', t('settings.title'));
   $('#open-settings').addEventListener('click', settingsSheet);
+  $('#streak-pill').addEventListener('click', streakSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   cfg = await (await fetch('/config.json', { cache: 'no-store' })).json();
   if (!(await idToken())) return showAuth();

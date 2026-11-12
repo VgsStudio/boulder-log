@@ -484,3 +484,63 @@ body {
 .gallery button { padding: 0; border: 0; background: var(--surface-2); position: relative; cursor: pointer; aspect-ratio: 1; border-radius: 14px; overflow: hidden; }
 .level-pill { padding: 2px 10px; border-radius: 10px; background: var(--blue); color: var(--on-color); font-weight: 900; }
 .profile-counts { align-items: center; }
+
+/* ---------- marcas de giz (o mesmo traço do check do logo) ----------
+   Cada risco é uma máscara SVG com o filtro de giz; a cor vem de --chalk, então funciona nos dois temas:
+   no claro o giz é azul (giz colorido na parede clara), no escuro é giz branco de verdade. */
+:root { --chalk: var(--blue); --m-underline: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 24' preserveAspectRatio='none' %3E%3Cfilter id='c' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='4' result='w'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='w' scale='4' xChannelSelector='R' yChannelSelector='G' result='r'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.2' numOctaves='1' seed='9' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.4' result='h'/%3E%3CfeComposite in='r' in2='h' operator='in'/%3E%3C/filter%3E%3Cg filter='url%28%23c%29' fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 15c48-7 120-10 228-6' stroke-width='9'/%3E%3Cpath d='M40 19c50-3 100-4 150-2' stroke-width='4' opacity='.7'/%3E%3C/g%3E%3C/svg%3E"); --m-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none' %3E%3Cfilter id='c' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3' result='w'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='w' scale='4' xChannelSelector='R' yChannelSelector='G' result='r'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.2' numOctaves='1' seed='9' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.4' result='h'/%3E%3CfeComposite in='r' in2='h' operator='in'/%3E%3C/filter%3E%3Cg filter='url%28%23c%29' fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 54c8 7 15 15 21 25 11-21 27-43 47-60' stroke-width='14'/%3E%3C/g%3E%3C/svg%3E"); --m-tally: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 120' preserveAspectRatio='none' %3E%3Cfilter id='c' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='6' result='w'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='w' scale='4' xChannelSelector='R' yChannelSelector='G' result='r'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.2' numOctaves='1' seed='9' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.4' result='h'/%3E%3CfeComposite in='r' in2='h' operator='in'/%3E%3C/filter%3E%3Cg filter='url%28%23c%29' fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M24 18v70M44 14v76M64 18v70M84 14v76' stroke-width='8'/%3E%3Cpath d='M10 70l90-40' stroke-width='8'/%3E%3Cpath d='M130 22v66M150 18v72' stroke-width='8'/%3E%3Cpath d='M186 30c8 6 13 13 18 22 10-20 24-38 44-52' stroke-width='9'/%3E%3C/g%3E%3C/svg%3E"); --m-hatch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 12' preserveAspectRatio='none' %3E%3Cfilter id='c' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='2' result='w'/%3E%3CfeDisplacementMap in='SourceGraphic' in2='w' scale='2' xChannelSelector='R' yChannelSelector='G' result='r'/%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.2' numOctaves='1' seed='9' result='g'/%3E%3CfeColorMatrix in='g' type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.1 1.4' result='h'/%3E%3CfeComposite in='r' in2='h' operator='in'/%3E%3C/filter%3E%3Cg filter='url%28%23c%29' fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M-4 14L8 -2M8 14L20 -2M20 14L32 -2M32 14L44 -2' stroke-width='3'/%3E%3C/g%3E%3C/svg%3E"); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --chalk: #fbfaf6; } }
+:root[data-theme="dark"] { --chalk: #fbfaf6; }
+.chalk-mask { background: var(--chalk); -webkit-mask: var(--m) center / 100% 100% no-repeat; mask: var(--m) center / 100% 100% no-repeat; }
+
+/* Título da tela: risco de giz embaixo. */
+h1:not(.row)::after {
+  content: ""; display: block; width: 132px; height: 13px; margin-top: 6px;
+  background: var(--chalk); opacity: .9;
+  -webkit-mask: var(--m-underline) left / 100% 100% no-repeat; mask: var(--m-underline) left / 100% 100% no-repeat;
+}
+
+/* Título de card: check de giz antes. */
+.card > h2:first-child::before, section > h2:first-child::before {
+  content: ""; display: inline-block; width: 1.05em; height: 1.05em; margin: 0 .35em -.12em 0;
+  background: var(--chalk);
+  -webkit-mask: var(--m-tick) center / contain no-repeat; mask: var(--m-tick) center / contain no-repeat;
+}
+
+/* Aba ativa: risco de giz sob o nome. */
+.tabbar a span { position: relative; }
+.tabbar a[aria-current="page"] span::after {
+  content: ""; position: absolute; left: -6px; right: -6px; bottom: -6px; height: 7px;
+  background: var(--blue);
+  -webkit-mask: var(--m-underline) center / 100% 100% no-repeat; mask: var(--m-underline) center / 100% 100% no-repeat;
+}
+
+/* Card da sequência: marcas de contagem e check riscados a giz ao fundo. */
+.hero { isolation: isolate; }
+.hero.on::before {
+  content: ""; position: absolute; z-index: -1; right: 96px; top: 10px; width: 120px; height: 56px;
+  background: #fff; opacity: .16; transform: rotate(-8deg);
+  -webkit-mask: var(--m-tally) center / 100% 100% no-repeat; mask: var(--m-tally) center / 100% 100% no-repeat;
+}
+
+/* Barras de progresso: preenchimento hachurado a giz. */
+.progress span { position: relative; overflow: hidden; }
+.progress span::after {
+  content: ""; position: absolute; inset: 0; background: #fff; opacity: .28;
+  -webkit-mask: var(--m-hatch) left / 24px 100% repeat-x; mask: var(--m-hatch) left / 24px 100% repeat-x;
+}
+
+/* Botões coloridos: pó de magnésio na face, como mão de quem acabou de passar giz. */
+.btn.primary, .btn.go { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -3 1.6'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url%28%23n%29' opacity='.1'/%3E%3C/svg%3E"); background-size: 160px 160px; }
+
+/* Sem zoom de pinça na página (a foto tem zoom próprio); campos com 16px para o iOS não ampliar ao focar. */
+html { touch-action: pan-x pan-y; }
+input, select, textarea { font-size: max(16px, 1em); }
+.icon-btn svg.gear { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button.streak-pill { border: 0; cursor: pointer; font: inherit; font-family: var(--display); font-weight: 900; }
+.line-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pin-btn { margin: 0; color: var(--muted); }
+.pin-btn[aria-pressed="true"] { color: var(--blue); }
+.pin-btn[aria-pressed="true"] .line-ico { fill: var(--blue-soft); }
+.share-btn { gap: 8px; }
+.share-btn .line-ico { width: 20px; height: 20px; }

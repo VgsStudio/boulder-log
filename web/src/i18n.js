@@ -4,7 +4,7 @@ document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
 
 const dict = {
   pt: {
-    'tab.session': 'Sessão', 'tab.history': 'Histórico', 'tab.progress': 'Evolução', 'tab.friends': 'Amigos', 'settings.theme': 'Tema', 'settings.themeAuto': 'Automático', 'settings.themeLight': 'Claro', 'settings.themeDark': 'Escuro',
+    'tab.session': 'Sessão', 'tab.history': 'Histórico', 'tab.progress': 'Evolução', 'tab.friends': 'Amigos', 'streak.title': 'Sequência: {n} semanas', 'streak.explain': 'O foguinho conta as semanas seguidas (segunda a domingo) em que você escalou pelo menos uma vez. Pulou uma semana inteira, a sequência volta pro zero.', 'streak.safe': 'Esta semana já está garantida. Volte na próxima para somar mais uma.', 'streak.risk': 'Você ainda não escalou esta semana. Registre uma sessão até domingo para não perder a sequência.', 'profile.share': 'Compartilhar', 'profile.shareMine': 'Me segue no Chalkmark: @{h}', 'profile.shareOther': 'Olha o perfil de {n} no Chalkmark', 'holds.edit': 'Editar agarras da via', 'holds.save': 'Salvar agarras', 'holds.cancel': 'Cancelar', 'holds.hint': 'Agarras na via: {n}. Toque numa agarra para incluir ou tirar.', 'holds.saved': 'Agarras salvas.', 'settings.theme': 'Tema', 'settings.themeAuto': 'Automático', 'settings.themeLight': 'Claro', 'settings.themeDark': 'Escuro',
     'zoom.reset': 'Ver foto inteira',
     'profile.create': 'Criar meu perfil', 'profile.edit': 'Editar perfil', 'profile.lead': 'Com perfil, seus amigos te acham pelo @, vocês se seguem e entram no ranking da semana.',
     'profile.photo': 'Escolher foto de perfil', 'profile.name': 'Nome', 'profile.handle': 'Usuário', 'profile.handleRule': '3 a 20 caracteres: letras minúsculas, números, ponto ou _.',
@@ -79,7 +79,7 @@ const dict = {
     'style.technical': 'Técnico', 'style.coordination': 'Coordenação', 'style.heel_hook': 'Calcanhar', 'style.toe_hook': 'Peito de pé', 'style.mantle': 'Mantle',
   },
   en: {
-    'tab.session': 'Session', 'tab.history': 'History', 'tab.progress': 'Progress', 'tab.friends': 'Friends', 'settings.theme': 'Theme', 'settings.themeAuto': 'Automatic', 'settings.themeLight': 'Light', 'settings.themeDark': 'Dark',
+    'tab.session': 'Session', 'tab.history': 'History', 'tab.progress': 'Progress', 'tab.friends': 'Friends', 'streak.title': 'Streak: {n} weeks', 'streak.explain': 'The flame counts the weeks in a row (Monday to Sunday) in which you climbed at least once. Skip a whole week and the streak goes back to zero.', 'streak.safe': 'This week is already secured. Come back next week to add one more.', 'streak.risk': "You haven't climbed this week yet. Log a session by Sunday to keep your streak.", 'profile.share': 'Share', 'profile.shareMine': 'Follow me on Chalkmark: @{h}', 'profile.shareOther': "Check out {n}'s profile on Chalkmark", 'holds.edit': 'Edit the problem holds', 'holds.save': 'Save holds', 'holds.cancel': 'Cancel', 'holds.hint': 'Holds in the problem: {n}. Tap a hold to add or remove it.', 'holds.saved': 'Holds saved.', 'settings.theme': 'Theme', 'settings.themeAuto': 'Automatic', 'settings.themeLight': 'Light', 'settings.themeDark': 'Dark',
     'zoom.reset': 'Show whole photo',
     'profile.create': 'Create my profile', 'profile.edit': 'Edit profile', 'profile.lead': 'With a profile, friends find you by your @, you follow each other and join the weekly ranking.',
     'profile.photo': 'Choose profile photo', 'profile.name': 'Name', 'profile.handle': 'Username', 'profile.handleRule': '3 to 20 characters: lowercase letters, numbers, dot or _.',
