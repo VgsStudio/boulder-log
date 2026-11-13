@@ -11,6 +11,35 @@ import { useStore, Seg, ClimbRow } from './base.jsx';
 import { Hero, Icon, recapSheet } from './game.jsx';
 import { GoalsCard, SessionHeader } from './history.jsx';
 
+// Primeiro boulder: o caminho mais curto até o primeiro registro (quem cria conta e cai no perfil
+// vazio costuma sair sem registrar nada). Sem sessão aberta, vai para "Começar sessão" e abre o
+// registro rápido assim que ela começa.
+let firstIntent = false;
+export function startFirstClimb(from) {
+  track('first_climb_cta', { from });
+  const s = activeSession();
+  if (s) { quickLogSheet(s); return; }
+  firstIntent = true;
+  location.hash = '#/';
+}
+export const firstClimbSheet = () => openSheet(
+  <div className="stack">
+    <div className="push-bell" aria-hidden="true">🧗</div>
+    <h2>{state.profile?.name ? t('first.titleName', { n: state.profile.name.split(' ')[0] }) : t('first.title')}</h2>
+    <p className="muted">{t('first.lead')}</p>
+    <button className="btn primary big block" type="button" onClick={() => { $('#sheet').close(); startFirstClimb('welcome'); }}>{t('first.cta')}</button>
+    <button className="btn ghost block" type="button" onClick={() => $('#sheet').close()}>{t('guest.notNow')}</button>
+  </div>,
+);
+/** Card no próprio perfil enquanto não há nenhum boulder. */
+export const FirstClimbCard = () => (
+  <section className="card stack first-climb">
+    <h2>{t('first.cardTitle')}</h2>
+    <p className="muted">{t('first.lead')}</p>
+    <button className="btn primary big block" type="button" onClick={() => startFirstClimb('profile')}>{t('first.cta')}</button>
+  </section>
+);
+
 export function Session() {
   useStore();
   const s = activeSession();
@@ -51,14 +80,16 @@ function StartSession() {
       }
       localStorage.setItem('bl:gym', id);
       state.sessions.push(await api('/sessions', { method: 'POST', body: { gymId: id } }));
-      track('session_started', { new_gym: gymId === '__new', detected: detected });
+      track('session_started', { new_gym: gymId === '__new', detected: detected, first: firstIntent });
       render();
+      if (firstIntent) { firstIntent = false; quickLogSheet(activeSession()); }
     } catch (err) { fail(err); setBusy(false); }
   };
 
   return (
     <div className="stack">
       <h1>{t('session.ready')}</h1>
+      {firstIntent && <p className="card first-hint">{t('first.hint')}</p>}
       <Hero />
       <GoalsCard />
       <div className="card stack">

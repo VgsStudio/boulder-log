@@ -267,6 +267,15 @@ export function maybeAskPush() {
   pushSheet();
 }
 
+/** Depois de registrar um boulder (momento de vitória): convida a instalar o app ou a ligar os
+ *  lembretes, quando a comemoração fechar. Os intervalos de "agora não" continuam valendo. */
+export function askAfterWin() {
+  if (guestMode) return;
+  const go = () => setTimeout(() => { if (!maybeAskInstall()) maybeAskPush(); }, 700);
+  const d = $('#sheet');
+  if (d.open) d.addEventListener('close', go, { once: true }); else go();
+}
+
 export function pushSheet() {
   try { localStorage.setItem('cm:pushAsk', String(Date.now())); } catch {}
   openSheet(<PushAsk />);

@@ -14,6 +14,7 @@ import { useStore, useRedraw, Seg, Swatch, FadeImg, lqipBg } from './base.jsx';
 import { Icon, LineIcon, streakSheet } from './game.jsx';
 import { SettingsButton } from './shell.jsx';
 import { historyUi } from './history.jsx';
+import { FirstClimbCard } from './session.jsx';
 
 const closeSheet = () => $('#sheet').close();
 
@@ -352,6 +353,7 @@ export function User({ handle, isTab = false }) {
           <span className="muted">›</span>
         </a>
       )}
+      {u.me && !guestMode && !state.climbs.length && <FirstClimbCard />}
 
       <section className="card stack pinned">
         <h2>{t('pin.title')}</h2>

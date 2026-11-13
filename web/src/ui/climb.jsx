@@ -16,7 +16,7 @@ import { openSheet } from '../session.js';
 import { useStore, useRedraw, Seg, Swatch, ClimbRow } from './base.jsx';
 import { LineIcon, celebrate } from './game.jsx';
 import { Avatar, FollowButton, pinClimb } from './social.jsx';
-import { runTour, standalone, isIOS, Terms } from './settings.jsx';
+import { runTour, standalone, isIOS, Terms, askAfterWin } from './settings.jsx';
 import { Stage, Overlay, CanvasView, ClimbStage, WithNav, holdBrush, cycleRole } from './photo.jsx';
 
 const closeSheet = () => $('#sheet').close();
@@ -112,7 +112,7 @@ function QuickLog({ s }) {
       const lvAfter = S.level(myXp()).level;
       celebrate({ unlocked: S.newAchievements(before, S.achievements(state.sessions, state.climbs)), xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result });
       render();
-      if (guestMode) setTimeout(needAccount, 1600);
+      if (guestMode) setTimeout(needAccount, 1600); else setTimeout(askAfterWin, 300);
     } catch (err) { fail(err); setBusy(false); }
   };
   return (
@@ -314,6 +314,7 @@ function NewClimbForm({ s }) {
       setTimeout(() => celebrate({ unlocked, xp: S.xpFor(climb), levelUp: lvAfter > lvBefore ? lvAfter : 0, result: climb.result }), 50);
       location.replace(`#/climb/${climb.id}`); // sem voltar para o formulário
       if (guestMode) setTimeout(needAccount, 1600); // depois da comemoração
+      else setTimeout(askAfterWin, 300);
       // A foto sobe em segundo plano; depois dela, o estilo da via (IA). Nada disso segura a tela.
       if (uploads) {
         Promise.all([upload(uploads.full, full), upload(uploads.thumb, thumb)])

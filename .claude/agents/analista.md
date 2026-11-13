@@ -16,7 +16,7 @@ Você é o analista de produto do **Chalkmark** (app web/PWA de registro de boul
 
 ## Eventos do app (custom)
 
-`session_started`, `session_ended`, `session_auto_ended`, `session_deleted` (sessão de treino) · `climb_logged` (boulder registrado: a ação principal) · `holds_detected`, `holds_detect_failed`, `holds_edited` (detector de agarras) · `profile_created`, `profile_edited` · `follow`, `fire`/`unfire` (🔥) · `friend_climb_copied`, `project_try` ("Quero tentar") · `share_created`, `share_accepted`, `story_shared` · `guest_prompt`, `guest_blocked`, `auth_google_click` (convidado → conta) · `install_prompt_shown` · `inbox_opened` · `suggestion_hidden` · `feedback_sent`.
+`session_started` (`first: true` quando veio do atalho do primeiro boulder), `session_ended`, `session_auto_ended`, `session_deleted` (sessão de treino) · `first_climb_cta` (`from`: `welcome` ou `profile`) · `climb_logged` (boulder registrado: a ação principal) · `holds_detected`, `holds_detect_failed`, `holds_edited` (detector de agarras) · `profile_created`, `profile_edited` · `follow`, `fire`/`unfire` (🔥) · `friend_climb_copied`, `project_try` ("Quero tentar") · `share_created`, `share_accepted`, `story_shared` · `guest_prompt`, `guest_blocked`, `auth_google_click` (convidado → conta) · `install_prompt_shown` · `inbox_opened` · `suggestion_hidden` · `feedback_sent`.
 Mais os do PostHog: `$pageview` (enviado a cada troca de tela; rotas por hash `#/...`), `$autocapture`, `$rageclick`, `$exception`, `$web_vitals`.
 
 Confirme a lista com `read-data-schema` a cada relatório: eventos novos aparecem com o tempo.

@@ -11,6 +11,7 @@ import { backfillPreviews } from './ui/climb.jsx';
 import { profileSheet, claims } from './ui/social.jsx';
 import { loadInbox } from './ui/inbox.jsx';
 import { tourRunning, appTour, maybeAskInstall, maybeAskPush, maybeAskFeedback } from './ui/settings.jsx';
+import { firstClimbSheet } from './ui/session.jsx';
 import { App, shell, setShell, restoreScroll, needAccount, showAuth } from './ui/shell.jsx';
 
 export { restoreScroll, needAccount, showAuth };
@@ -103,7 +104,7 @@ async function boot() {
   try {
     if (!guestMode && !state.profile && Date.now() - Number(localStorage.getItem('cm:onb') || 0) > 86400_000) {
       localStorage.setItem('cm:onb', String(Date.now()));
-      const welcome = () => { if (!document.getElementById('sheet').open) profileSheet({ welcome: true }).then((p) => p && render()); };
+      const welcome = () => { if (!document.getElementById('sheet').open) profileSheet({ welcome: true }).then((p) => { if (p) { render(); if (!state.climbs.length) setTimeout(firstClimbSheet, 400); } }); };
       setTimeout(() => (tourRunning ? setTimeout(welcome, 15000) : welcome()), 600);
     }
   } catch {}
