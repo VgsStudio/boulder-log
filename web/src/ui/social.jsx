@@ -62,6 +62,7 @@ function ProfileForm({ welcome, done }) {
   const sug = cur ? {} : profileSuggestion();
   const [name, setName] = useState(cur?.name ?? sug.name ?? '');
   const [handle, setHandle] = useState(cur?.handle ?? sug.handle ?? '');
+  const [priv, setPriv] = useState(!!cur?.private);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(cur?.avatarUrl ?? null);
   const [error, setError] = useState('');
@@ -71,7 +72,7 @@ function ProfileForm({ welcome, done }) {
     setBusy(true);
     try {
       const blob = file ? await compress(await toCanvas(file, 400), 0.85) : null;
-      const res = await api('/profile', { method: 'PUT', body: { name, handle, ...(blob ? { avatarType: blob.type } : {}) } });
+      const res = await api('/profile', { method: 'PUT', body: { name, handle, private: priv, ...(blob ? { avatarType: blob.type } : {}) } });
       if (res.upload) { await upload(res.upload, blob); res.avatarUrl = URL.createObjectURL(blob); }
       delete res.upload;
       track(cur ? 'profile_edited' : 'profile_created');
@@ -103,6 +104,7 @@ function ProfileForm({ welcome, done }) {
         </div>
         <span className={`small ${error ? 'error' : 'muted'}`}>{error || t('profile.handleRule')}</span>
       </label>
+      <label className="check"><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /><span>{t('profile.private')}</span></label>
       <div className="row">
         <button className="btn ghost grow" type="button" onClick={() => done(null)}>{t('settings.close')}</button>
         <button className="btn primary grow" type="submit" disabled={busy}>{t('settings.save')}</button>
@@ -361,7 +363,7 @@ export function User({ handle, isTab = false }) {
             </button>
             {u.pinned.photoUrl && <ClimbStage c={u.pinned} url={u.pinned.photoUrl} onOpen={() => openPinned(u)} />}
             {u.pinned.tries > 1 && <p className="muted small">{t('pin.tries', { n: u.pinned.tries })}</p>}
-            {!u.me && u.friends && <TryButton u={u} c={u.pinned} />}
+            {!u.me && u.visible && <TryButton u={u} c={u.pinned} />}
           </>
           : <p className="muted">{u.me ? t('pin.emptyMe') : t('pin.empty')}</p>}
       </section>
@@ -446,7 +448,7 @@ export function friendClimbSheet(u, c, list = [c]) {
       <h2 className="row"><Swatch c={c.color} />{colorName(c.color)}<span className="grade-pill">{grade(c.grade)}</span><span className="grow" /><span className={`badge ${c.result}`}>{t(`result.${c.result}`)}</span></h2>
       {c.photoUrl && <WithNav hasPrev={i > 0} hasNext={i < list.length - 1} go={go}><ClimbStage key={c.id} url={c.photoUrl} c={c} /></WithNav>}
       <p className="muted small">{fmtDate(c.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-      {!u.me && <TryButton u={u} c={c} />}
+      {!u.me && u.visible && <TryButton u={u} c={c} />}
       <button className="btn ghost block" type="button" onClick={closeSheet}>{t('settings.close')}</button>
     </div>,
   );
@@ -506,7 +508,7 @@ function FireButton({ c }) {
 }
 
 function FeedCard({ c }) {
-  const owner = { handle: c.owner.handle, name: c.owner.name, me: false, friends: true };
+  const owner = { handle: c.owner.handle, name: c.owner.name, me: false, friends: true, visible: true };
   const open = () => friendClimbSheet(owner, { ...c, id: c.rootId });
   return (
     <article className="card feed-card">

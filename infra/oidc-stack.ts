@@ -7,7 +7,7 @@ export interface OidcStackProps extends StackProps {
   githubRepoClaim: string;
 }
 
-/** Deixa o GitHub Actions (só na branch main) rodar `cdk deploy` sem access key.
+/** Deixa o GitHub Actions (só nas branches main e dev) rodar `cdk deploy` sem access key.
  *  Usa o provedor OIDC do GitHub que já existe na conta (o mesmo do serverless-selfie). */
 export class OidcStack extends Stack {
   constructor(scope: Construct, id: string, props: OidcStackProps) {
@@ -22,12 +22,12 @@ export class OidcStack extends Stack {
         `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`,
         {
           StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
-          // Aceita a claim clássica e a imutável (Owner@id/repo@id), só na main.
+          // Aceita a claim clássica e a imutável (Owner@id/repo@id), só na main e na dev.
           StringLike: {
-            'token.actions.githubusercontent.com:sub': repos.flatMap(([owner, repo]) => [
-              `repo:${owner}/${repo}:ref:refs/heads/main`,
-              `repo:${owner}@*/${repo}@*:ref:refs/heads/main`,
-            ]),
+            'token.actions.githubusercontent.com:sub': repos.flatMap(([owner, repo]) => ['main', 'dev'].flatMap((b) => [
+              `repo:${owner}/${repo}:ref:refs/heads/${b}`,
+              `repo:${owner}@*/${repo}@*:ref:refs/heads/${b}`,
+            ])),
           },
         },
       ),

@@ -22,8 +22,8 @@ export function trackError(err) {
 }
 
 export async function startAnalytics({ userId, guest }) {
-  // No computador de teste (localhost) não mede, para não sujar os números.
-  if (!statsOn() || ['localhost', '127.0.0.1'].includes(location.hostname)) return;
+  // No computador de teste (localhost) e no ambiente de dev não mede, para não sujar os números.
+  if (!statsOn() || ['localhost', '127.0.0.1'].includes(location.hostname) || location.hostname.includes('-dev.')) return;
   const { default: posthog } = await import('posthog-js/dist/module.full'); // gravação e erros já inclusos (sem baixar scripts de fora)
   posthog.init(KEY, {
     api_host: HOST,

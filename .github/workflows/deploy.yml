@@ -1,9 +1,10 @@
 name: Deploy
 
-# Todo push na main testa e publica.
+# Todo push testa e publica: main → produção (BoulderLog-App), dev → testes (BoulderLog-Dev,
+# chalkmark-dev.vsoller.com.br).
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-boulder-log
+  group: deploy-boulder-log-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -33,10 +34,11 @@ jobs:
           aws-region: us-east-1
           mask-aws-account-id: true
       - name: cdk deploy
-        run: npx cdk deploy BoulderLog-App --require-approval never
+        run: npx cdk deploy ${{ github.ref_name == 'main' && 'BoulderLog-App' || 'BoulderLog-Dev' }} --require-approval never
         env:
           HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
           ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
           EMAIL_VIA_SES: ${{ vars.EMAIL_VIA_SES }}
           GOOGLE_OAUTH: ${{ vars.GOOGLE_OAUTH }}
           REPLY_TO_EMAIL: ${{ vars.REPLY_TO_EMAIL }}
+          DEV_GOOGLE_OAUTH: ${{ vars.DEV_GOOGLE_OAUTH }}

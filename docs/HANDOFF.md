@@ -1,7 +1,7 @@
 # Chalkmark: handoff
 
 Documento para retomar o projeto em outra sessão: o que é, o que existe, por que foi feito assim, como
-operar e o que vem depois. Atualizado em 12/11/2026 (tarde).
+operar e o que vem depois. Atualizado em 13/11/2026.
 
 > Repositório público: este arquivo não traz IDs de conta, pool, tabela ou bucket. Para achar:
 > `aws cloudformation describe-stack-resources --stack-name BoulderLog-App` (região us-east-1).
@@ -108,6 +108,7 @@ do app + Google (Secrets Manager chalkmark/google-oauth) + gatilho PreSignUp; e-
 - Visitas: `$pageview` com `screen` (`home`, `session`, `new_climb`, `climb`, `history`, `progress`, `my_profile`, `user_profile`, `friends`, `shared_climb`).
 - Eventos: `climb_logged` (resultado, grau, foto, agarras sugeridas × corrigidas: `holds_added`/`holds_removed` medem o acerto do detector), `holds_detected` (quantas e em quantos ms), `holds_detect_failed`, `holds_edited`, `project_try`, `session_started`/`session_ended`/`session_auto_ended`, `follow`/`unfollow`, `fire`, `share_created`/`share_accepted`, `friend_climb_copied`, `profile_created`, `push_enabled`/`push_blocked`, `install_prompt_shown`, `feedback_sent`, `guest_prompt`/`guest_blocked`, `auth_login`/`auth_signup`/`auth_google_click`.
 - **MCP do PostHog** configurado nesta máquina (escopo local do Claude Code, fora do repo): `claude mcp add --transport http --scope local posthog https://mcp-eu.posthog.com/mcp --header "Authorization: Bearer <chave pessoal phx_>"`. Projeto 346656. A chave pessoal nunca vai para o repositório.
+- **Agente `analista`** (`.claude/agents/analista.md`): peça "relatório de uso" e ele faz a análise completa no PostHog (usuários, funis, erros, gravações com Replay Vision) e cruza com o código. Usa o MCP local acima.
 - Ajustes → "Estatísticas de uso" desliga (fica em `cm:noStats`). Política de privacidade atualizada. CSP: `connect-src` inclui `eu.i.posthog.com` e `eu-assets.i.posthog.com`.
 
 ### Dados (DynamoDB, `pk`/`sk`)
@@ -238,7 +239,13 @@ Nada abaixo foi testado de ponta a ponta num celular real:
 ### Estado em 12/11/2026 (fim desta rodada)
 
 - Front migrado para **React 19** (telas em `web/src/ui/*.jsx`), validado por teste de fumaça em todas as telas, sem conta e no fluxo da foto. Publicado.
-- PostHog no ar (EU). Ver eventos no painel `eu.posthog.com`. Falta: criar o agente do Claude com o MCP do PostHog (chave pessoal adicionada por você com `claude mcp add`) e um relatório semanal com `/schedule`.
+- PostHog no ar (EU). Ver eventos no painel `eu.posthog.com`. Agente `analista` criado (13/11). Relatório semanal automático ainda não (o MCP é local; na nuvem precisaria da chave pessoal lá).
+
+### Estado em 13/11/2026
+
+- **Perfis públicos por padrão**: histórico, números, fotos e seguidores visíveis para qualquer um (inclusive sem conta). "Perfil privado" em Editar perfil volta à regra antiga (só amigos mútuos). Bloqueio esconde o histórico. Regra única em `canSee()` (`services/api.ts`).
+- **"Quero tentar" sem precisar ser amigo**: basta poder ver o perfil.
+- **Ambiente de dev**: branch `dev` → stack `BoulderLog-Dev` → https://chalkmark-dev.vsoller.com.br. Dados, login (Cognito `vgs-chalkmark-dev`) e fotos próprios; sem SES (código de e-mail sai pelo Cognito, limite baixo), sem PostHog, sem alerta de custo. Google desligado até cadastrar no Google Cloud o redirect `https://vgs-chalkmark-dev.auth.us-east-1.amazoncognito.com/oauth2/idpresponse` e ligar a variável `DEV_GOOGLE_OAUTH=true` no GitHub. Fluxo: trabalhar na `dev`, testar no dev, depois merge na `main`.
 - Som só ao registrar boulder (trombeta).
 - Ideias anotadas: **perfil verificado pago** (Stripe, valor simbólico, para testar interesse); **modo Rocha** (marcar agarras à mão, sem detector); app nativo (Expo) se houver tração; marca "Chalkmark" pode conflitar com o produto da Optimal Workshop (pesquisar no INPI antes de investir); `chalkmark.com.br` está livre (~R$ 40/ano).
 - Testar no celular: fotos depois de muito tempo com o app aberto (agora renovam sozinhas), arrastar janelas para fechar, zoom e pincel na versão React.

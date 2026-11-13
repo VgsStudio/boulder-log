@@ -27,6 +27,25 @@ new BoulderStack(app, 'BoulderLog-App', {
   replyToEmail: e.REPLY_TO_EMAIL || undefined,
 });
 
+// Ambiente de testes (branch dev): dados, login e site próprios; nada compartilhado com produção
+// além da zona DNS. Sem SES (o domínio de e-mail é do stack de produção), sem alerta de custo.
+// Entrar com Google: ligar DEV_GOOGLE_OAUTH=true depois de cadastrar no Google o redirect do
+// Cognito de dev (https://<prefixo>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse).
+new BoulderStack(app, 'BoulderLog-Dev', {
+  env,
+  zoneName: e.ZONE_NAME || 'vsoller.com.br',
+  hostedZoneId: e.HOSTED_ZONE_ID || undefined,
+  domainName: e.DEV_DOMAIN || 'chalkmark-dev.vsoller.com.br',
+  aliasDomains: [],
+  cognitoDomainPrefix: e.DEV_COGNITO_DOMAIN_PREFIX || 'vgs-chalkmark-dev',
+  userPoolName: 'chalkmark-dev',
+  mailDns: false,
+  aiModel: e.AI_MODEL || 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  aiDailyLimit: Number(e.AI_DAILY_LIMIT || 20),
+  emailViaSes: false,
+  googleOAuth: e.DEV_GOOGLE_OAUTH === 'true',
+});
+
 // Só cria o papel do GitHub Actions quando a claim do repositório é informada.
 if (e.GITHUB_REPO_CLAIM) {
   new OidcStack(app, 'BoulderLog-Oidc', { env, githubRepoClaim: e.GITHUB_REPO_CLAIM });

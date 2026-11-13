@@ -299,6 +299,14 @@ async function climbsBefore(sub: string, before: number, limit: number) {
   }));
   return out.Items ?? [];
 }
+/** Pode ver o histórico de `them`: o próprio; perfil público (o padrão); ou amigos (mútuos) num perfil
+ *  privado. Bloqueio, de qualquer lado, esconde. */
+async function canSee(viewer: string, them: string, p: Record<string, unknown>) {
+  if (viewer === them) return true;
+  if (viewer === ANON) return !p.private;
+  if (await blockedEither(viewer, them)) return false;
+  return !p.private || ((await isFollowing(viewer, them)) && (await isFollowing(them, viewer)));
+}
 const mutualFriends = async (sub: string) => {
   const [following, followers] = await Promise.all([followsOf(sub, 'FOLLOWS#'), followsOf(sub, 'FOLLOWER#')]);
   const back = new Set(followers);
@@ -671,7 +679,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
     // ---------- perfil ----------
     case 'GET /api/profile': {
       const p = await profileOf(sub);
-      return json(200, p ? { ...(await card(p)), pinned: p.pinned ?? null } : {});
+      return json(200, p ? { ...(await card(p)), pinned: p.pinned ?? null, private: !!p.private } : {});
     }
     case 'PUT /api/profile': {
       const b = body();
@@ -686,6 +694,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         f.pinned = b.pinned === null ? null : id(b.pinned, 'pinned');
         if (f.pinned) await getItem(pk, `CLIMB#${f.pinned}`);
       }
+      if (b.private !== undefined) f.private = b.private === true;
       const avatarType = b.avatarType === undefined ? undefined : oneOf(PHOTO_TYPES, b.avatarType, 'avatarType');
       if (avatarType) f.avatarType = avatarType;
       const p: Record<string, unknown> = { ...old, ...f, pk, sk: 'PROFILE', createdAt: old?.createdAt ?? nowIso() };
@@ -703,7 +712,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         throw e;
       }
       return json(200, {
-        ...(await card(p)), pinned: p.pinned ?? null,
+        ...(await card(p)), pinned: p.pinned ?? null, private: !!p.private,
         upload: avatarType ? await signPost(avatarKey(sub), avatarType, MAX_AVATAR) : undefined,
       });
     }
@@ -741,6 +750,7 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
         queryAll(pkOf(them), 'CLIMB#'), queryAll(pkOf(them), 'SESSION#'),
       ]);
       const friends = me || (following && followsMe);
+      const visible = await canSee(sub, them, p);
       // Situação de cada boulder: projeto mandado depois (numa tentativa) conta como mandado.
       const sentRoots = new Set(climbs.filter((c) => c.projectId && isSend(c)).map((c) => c.projectId));
       const status = (c: Record<string, unknown>, cid: string) => (c.result === 'flash' ? 'flash'
@@ -759,18 +769,18 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       const pinnedTries = pinned ? climbs.filter((c) => c.sk === pinned.sk || c.projectId === p.pinned).length : 0;
       const pinnedSent = pinned ? climbs.some((c) => (c.sk === pinned.sk || c.projectId === p.pinned) && isSend(c)) : false;
       return json(200, {
-        ...(await card(p)), me, following, followsMe, friends,
+        ...(await card(p)), me, following, followsMe, friends, visible, private: !!p.private,
         blocked: !me && sub !== ANON ? !!(await ddb.send(new GetCommand({ TableName: TABLE, Key: { pk, sk: `BLOCK#${them}` } }))).Item : false,
         followers: followers.length, follows: follows.length,
         level: level(totalXp(climbs)).level,
         pinned: pinned ? { ...(await photo(pinned)), tries: pinnedTries, sent: pinnedSent } : null,
-        // Histórico só para amigos (os dois se seguem).
-        stats: friends ? {
+        // Histórico: perfil público (padrão) para todos; privado só para amigos (os dois se seguem).
+        stats: visible ? {
           sessions: sessions.length, sends: sends.length,
           maxGrade: sends.length ? Math.max(...sends.map((c) => c.grade as number)) : null,
           streak: streakWeeks(sessions),
         } : null,
-        climbs: friends
+        climbs: visible
           ? await Promise.all(climbs.filter((c) => c.photoType && !c.projectId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 60).map(photo))
           : null,
       });
@@ -803,10 +813,10 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       return json(200, { following: on, followsMe: await isFollowing(them, sub) });
     }
     case 'GET /api/users/{handle}/people': {
-      // Seguidores / seguindo: no próprio perfil e no de amigos (mútuos); para os outros, só os números.
+      // Seguidores / seguindo: mesma regra do histórico (público, ou amigos num perfil privado).
       const them = await subOfHandle(event.pathParameters?.handle);
       const kind = event.queryStringParameters?.type === 'following' ? 'FOLLOWS#' : 'FOLLOWER#';
-      if (them !== sub && !((await isFollowing(sub, them)) && (await isFollowing(them, sub)))) throw new HttpError(403, 'PRIVATE');
+      if (!(await canSee(sub, them, (await profileOf(them)) ?? {}))) throw new HttpError(403, 'PRIVATE');
       const subs = (await followsOf(them, kind)).slice(0, 500);
       const [mine, blocked] = await Promise.all([followsOf(sub, 'FOLLOWS#').then((l) => new Set(l)), blockedBy(sub)]);
       const profiles = (await profilesOf(subs)).filter((p) => !blocked.has(subOfPk(p.pk)));
@@ -834,9 +844,9 @@ async function route(event: HttpEvent, sub: string): Promise<HttpResult> {
       return json(200, { blocked: true });
     }
     case 'POST /api/users/{handle}/climbs/{id}/copy': {
-      // "Quero tentar": copia um boulder de um amigo para os próprios projetos.
+      // "Quero tentar": copia para os próprios projetos um boulder de quem você pode ver (perfil público ou amigo).
       const them = await subOfHandle(event.pathParameters?.handle);
-      if (them === sub || !(await isFollowing(sub, them)) || !(await isFollowing(them, sub))) throw new HttpError(403, 'NOT_FRIENDS');
+      if (them === sub || !(await canSee(sub, them, (await profileOf(them)) ?? {}))) throw new HttpError(403, 'PRIVATE');
       const cid = id(pid, 'id');
       const src = await getItem(pkOf(them), `CLIMB#${cid}`);
       return json(201, await copyClimb(sub, them, cid, src, {}));

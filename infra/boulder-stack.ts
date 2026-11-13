@@ -43,6 +43,9 @@ export interface BoulderStackProps extends StackProps {
   googleOAuth: boolean;
   /** Para onde vão as respostas aos e-mails do login (opcional; fica fora do código). */
   replyToEmail?: string;
+  /** Cria na zona o domínio de e-mail do SES (DKIM, MAIL FROM) e o DMARC. Só um stack por zona (o de produção). */
+  mailDns?: boolean;
+  userPoolName?: string;
 }
 
 /** Boulder Log: site (CloudFront + S3), API (HTTP API + 1 Lambda), dados (DynamoDB),
@@ -137,12 +140,14 @@ export class BoulderStack extends Stack {
       : route53.HostedZone.fromLookup(this, 'Zone', { domainName: props.zoneName });
 
     // ---------- E-mail (SES): domínio com DKIM e MAIL FROM próprio, para não cair no spam ----------
-    new ses.EmailIdentity(this, 'MailDomain', {
-      identity: ses.Identity.publicHostedZone(zone), // cria os CNAMEs do DKIM na zona
-      mailFromDomain: `mail.${props.zoneName}`, // MX + SPF criados na zona
-    });
-    // DMARC em modo só observação: alinha DKIM/SPF e ajuda o Gmail a confiar no domínio.
-    new route53.TxtRecord(this, 'Dmarc', { zone, recordName: `_dmarc.${props.zoneName}`, values: ['v=DMARC1; p=none;'] });
+    if (props.mailDns ?? true) {
+      new ses.EmailIdentity(this, 'MailDomain', {
+        identity: ses.Identity.publicHostedZone(zone), // cria os CNAMEs do DKIM na zona
+        mailFromDomain: `mail.${props.zoneName}`, // MX + SPF criados na zona
+      });
+      // DMARC em modo só observação: alinha DKIM/SPF e ajuda o Gmail a confiar no domínio.
+      new route53.TxtRecord(this, 'Dmarc', { zone, recordName: `_dmarc.${props.zoneName}`, values: ['v=DMARC1; p=none;'] });
+    }
     const fromEmail = `no-reply@${props.zoneName}`;
 
     // ---------- Login (Cognito Managed Login com a cara do app) ----------
@@ -163,7 +168,7 @@ export class BoulderStack extends Stack {
 
     const userPool = new cognito.UserPool(this, 'Users', {
       lambdaTriggers: { preSignUp },
-      userPoolName: 'boulder-log',
+      userPoolName: props.userPoolName ?? 'boulder-log',
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       autoVerify: { email: true },
